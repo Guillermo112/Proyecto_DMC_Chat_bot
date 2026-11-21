@@ -69,6 +69,23 @@ uvicorn app.main:app --reload
 pytest -q
 ```
 
+## Identificación por OTP (`app/auth`)
+
+`solicitar_codigo(ruc)` envía un código de 6 dígitos **solo** al correo
+registrado del cliente (vence en 10 min, se espera 60 s entre envíos) y
+devuelve `(id_verificacion, correo_enmascarado)`; `verificar_codigo(id, codigo)`
+devuelve el `cliente_id` o `None` (3 intentos fallidos = bloqueado). Solo se
+guarda el hash del código en `verificacion`; es lo único que escribe en la base.
+
+Prueba en vivo:
+
+1. En `.env`: `SMTP_*` (con Gmail, una
+   [contraseña de aplicación](https://myaccount.google.com/apppasswords)) y tu
+   correo en `CORREO_PRUEBA_1` (clientes 1-7) y/o `CORREO_PRUEBA_2` (clientes 8-13).
+2. Regenera la base: `python -X utf8 db/generar_datos.py`.
+3. `python -X utf8 -m scripts.demo_otp` e ingresa un RUC de esos clientes, p. ej.
+   `99813998698` (cliente 1) o `99488766344` (cliente 8).
+
 ## Capa de datos (`app/data`)
 
 Todas las funciones reciben `cliente_id` y lo aplican en el `WHERE`; ninguna
