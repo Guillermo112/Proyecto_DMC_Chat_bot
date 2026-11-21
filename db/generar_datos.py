@@ -10,7 +10,10 @@ Uso:
 - Genera 37 clientes adicionales con facturación calibrada a ~S/ 100 M en 6 meses
   (jun-nov 2026), es decir ~S/ 200 M anualizados.
 - Valida con aserciones que cada vista de detección devuelve exactamente lo sembrado.
-Todo es ficticio: RUC con prefijo 99, correos .example.
+Todo es ficticio: RUC con prefijo 99. Los correos de contacto de los clientes 1-13
+pueden ser dos correos reales de prueba (CORREO_PRUEBA_1 y CORREO_PRUEBA_2 en
+../.env) para recibir los códigos de verificación. Para ignorarlos:
+    python3 generar_datos.py --publico     # todos los correos terminan en .example
 """
 import sqlite3, random, json, hashlib, os, sys
 from datetime import date, datetime, timedelta
@@ -19,6 +22,22 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(HERE, "anticipa.db")
 SCHEMA = os.path.join(HERE, "schema.sql")
 JSON_OUT = os.path.join(HERE, "casos_datos.json")
+
+# Correos reales de prueba para los clientes sembrados 1-13: se leen de ../.env
+# (CORREO_PRUEBA_1 -> clientes 1-7, CORREO_PRUEBA_2 -> 8-13) para no versionarlos.
+# Sin definir, o con --publico, quedan los correos .example.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(HERE, "..", ".env"), override=False)
+except ImportError:
+    pass
+CORREO_PRUEBA_1 = os.getenv("CORREO_PRUEBA_1", "").strip()
+CORREO_PRUEBA_2 = os.getenv("CORREO_PRUEBA_2", "").strip()
+CONTACTOS_PRUEBA = {  # id_cliente -> (contacto, correo); solo los que tengan correo definido
+    **({i: ("Gabriela Quispe Ochoa", CORREO_PRUEBA_1) for i in range(1, 8)} if CORREO_PRUEBA_1 else {}),
+    **({i: ("Tomás Cárdenas Gutiérrez", CORREO_PRUEBA_2) for i in range(8, 14)} if CORREO_PRUEBA_2 else {}),
+}
+PUBLICO = "--publico" in sys.argv
 
 FECHA_ACTUAL = date(2026, 12, 5)
 IGV = 0.18
@@ -138,8 +157,11 @@ def build_clients():
         used.add(nombre)
         contacto = f"{rng.choice(NOMS)} {rng.choice(APES)} {rng.choice(APES)}"
         slug = f"cliente{cid:02d}"
+        correo = f"facturacion@{slug}.example"
+        if cid in CONTACTOS_PRUEBA and not PUBLICO:   # se asigna después de sortear: no altera el resto de datos
+            contacto, correo = CONTACTOS_PRUEBA[cid]
         clients[cid] = dict(id=cid, ruc=new_ruc(), nombre=nombre, sector=sector, seg=seg,
-                            correo=f"facturacion@{slug}.example", contacto=contacto,
+                            correo=correo, contacto=contacto,
                             ejecutivo=(cid % 5) + 1)
     return clients
 
