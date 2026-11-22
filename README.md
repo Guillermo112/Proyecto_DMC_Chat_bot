@@ -125,6 +125,9 @@ pueden pedir datos de otro cliente (`app/api/cliente.py`, sobre `app/data/factur
 | `GET /mi/servicios?estado` | Servicios contratados (incluye los dados de baja): tarifa pactada, SLA, alta y baja |
 | `GET /mi/comparar?periodo_b&periodo_a` | Qué cambió entre dos periodos (por defecto, frente al mes anterior); con facturas duplicadas responde un aviso sin comparar |
 
+Qué ruta usar según lo que pide el cliente (casuísticas CS-01 a CS-13 del PDF):
+[`docs/casuisticas_api.md`](docs/casuisticas_api.md).
+
 Las rutas `/api/...` son el CRUD de desarrollo para Postman: no usan token y
 **solo se montan con `ENTORNO=dev`**. Con cualquier otro valor, o sin definirlo,
 quedan únicamente `/health`, `/auth` y `/mi`.

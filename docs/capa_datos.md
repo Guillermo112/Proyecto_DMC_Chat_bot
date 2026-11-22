@@ -3,6 +3,28 @@
 Documentación de las funciones de acceso a `anticipa.db` que usará el
 chatbot (y, más adelante, las herramientas de LangChain en `app/tools`).
 
+## Alcance: solo modo A
+
+El PDF de casuísticas define dos modos de atención. **Este proyecto implementa
+solo el modo A**; el modo B queda fuera de alcance (decisión del equipo).
+
+| | Modo A (en alcance) | Modo B (fuera de alcance) |
+|---|---|---|
+| Qué hace el agente | Informa, explica, registra y deriva al ejecutivo | Además calcula ajustes, propone notas de crédito al aprobador del tramo y aplica las del tramo 1 |
+| CS-01 a CS-05, CS-07 | Confirma la anomalía, registra y deriva | Propone la nota de crédito al aprobador del tramo (o la aplica, CS-07) |
+| CS-06 | Informa y avisa al responsable | Igual, y evalúa el gesto P6 si el cliente lo pide |
+| CS-08 | No aplica gestos: registra y deriva | Aplica el gesto si corresponde |
+
+Consecuencias en esta capa:
+
+- Los montos se exponen como **observados** (`monto_observado`), nunca como
+  ajuste ni devolución: en el modo A el agente no decide montos.
+- No hay funciones de tramos, aprobadores, ajustes ni gestos. La base sí trae
+  esas tablas y vistas (`politica_tramo`, `ajuste`, `v_gestos_mes_actual`)
+  porque el generador siembra ambos modos.
+- Las tareas del modo B están identificadas en `PENDIENTES_datos.md`
+  ("Modo B: fuera de alcance"), por si se retoma.
+
 ## 1. Reglas de seguridad
 
 | Regla | Cómo se cumple |
@@ -166,8 +188,9 @@ detección de `db/schema.sql` (filtradas siempre por `cliente_id`).
   total ya sumado (24 000 y 13 500), para que el agente no sume a mano.
 - **CS-01:** `monto_observado` es el importe de las facturas de más
   (subtotal × (n − 1)), sin decir cuál vale.
-- **CS-05 frente a CS-07:** la distinción es por monto y tramo, que decide
-  `calcular_ajuste` (pendiente); aquí ambas son `averias_sla_incumplido`.
+- **CS-05 frente a CS-07:** solo difieren en el modo B (tramo 2 frente a
+  tramo 1, fuera de alcance); en el modo A ambas se informan y derivan igual,
+  y aquí son `averias_sla_incumplido`.
 - **No expone la causa técnica** de la avería (`averia.causa`): el PDF prohíbe
   comunicarla.
 - **Ya resuelto:** excluye facturas anuladas y averías con un ajuste
@@ -200,17 +223,9 @@ Solicitudes del cliente con su antigüedad y si están fuera de plazo.
 
 ## 3. Casuísticas y funciones
 
-| Casuística | Función principal | Comentario |
-|---|---|---|
-| CS-01 Factura duplicada | `detectar_anomalias`, `listar_facturas` | Saldo, resumen y comparación marcan el periodo en `periodos_multiples` / `facturas_multiples` sin sumar. |
-| CS-02 a CS-05, CS-07 | `detectar_anomalias`, `obtener_servicios`, `detalle_factura` | Detección y monto observado. El tramo y el aprobador (`calcular_ajuste`) están pendientes. |
-| CS-06 Solicitud fuera de plazo | `consultar_solicitudes` | Días y plazo; avisar al responsable queda pendiente (escritura). |
-| CS-08 Gesto comercial | — | Pendiente (`v_gestos_mes_actual`). |
-| CS-09 Variación de facturación | `comparar_periodos` | Líneas que cambiaron y su servicio (alta o baja). |
-| CS-10 Prorrateo | `detalle_factura`, `comparar_periodos` | Línea de tipo `prorrateo`; la fecha de activación viene en el `servicio` de la comparación. |
-| CS-11 Saldo y vencida | `saldo_pendiente` | |
-| CS-12 Identificación | — | Fuera de esta capa. |
-| CS-13 Fuera de alcance | `obtener_cliente` | Datos del ejecutivo para derivar. |
+Qué rutas y funciones usa cada casuística, en qué orden y qué campos leer:
+**`docs/casuisticas_api.md`**. Esa guía reemplaza la tabla que estaba aquí,
+para no mantener dos.
 
 ## 4. Particularidades de los datos
 
