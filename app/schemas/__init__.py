@@ -1,7 +1,13 @@
 from app.schemas.facturacion import (
+    AnomaliasCliente,
+    AveriaSlaIncumplido,
     Cliente,
+    CobroObservado,
+    CobroTarifa,
     ComparacionPeriodos,
+    ExcesoSinSustento,
     FacturaDetalle,
+    FacturaDuplicada,
     FacturaResumen,
     LineaComparada,
     LineaFactura,
@@ -14,12 +20,20 @@ from app.schemas.facturacion import (
     ResumenPeriodo,
     SaldoPendiente,
     Servicio,
+    ServicioBajaFacturado,
+    TarifaDistinta,
 )
 
 __all__ = [
+    "AnomaliasCliente",
+    "AveriaSlaIncumplido",
     "Cliente",
+    "CobroObservado",
+    "CobroTarifa",
     "ComparacionPeriodos",
+    "ExcesoSinSustento",
     "FacturaDetalle",
+    "FacturaDuplicada",
     "FacturaResumen",
     "LineaComparada",
     "LineaFactura",
@@ -32,4 +46,6 @@ __all__ = [
     "ResumenPeriodo",
     "SaldoPendiente",
     "Servicio",
+    "ServicioBajaFacturado",
+    "TarifaDistinta",
 ]

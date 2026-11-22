@@ -188,3 +188,96 @@ class ComparacionPeriodos(BaseModel):
     variacion_fuerte: bool | None
     lineas: list[LineaComparada] | None
     lineas_sin_cambio: int | None
+
+
+# ------------------------------------------------- anomalías detectadas
+
+class CobroObservado(BaseModel):
+    """Un cobro de una factura que forma parte de la anomalía."""
+    periodo: str
+    numero_factura: str
+    monto_observado: float  # sin IGV
+
+
+class FacturaDuplicada(BaseModel):
+    """CS-01: más de una factura vigente del mismo periodo e importe.
+
+    `monto_observado` es el importe de las facturas de más (n - 1), sin IGV.
+    No dice cuál de ellas vale: eso lo define el área responsable.
+    """
+    periodo: str
+    facturas: list[FacturaResumen]
+    monto_observado: float
+
+
+class ServicioBajaFacturado(BaseModel):
+    """CS-02: servicio cobrado en periodos posteriores al de su baja.
+
+    El periodo de la baja no cuenta (se cobra completo).
+    """
+    servicio: Servicio
+    cobros: list[CobroObservado]
+    monto_observado: float
+
+
+class CobroTarifa(CobroObservado):
+    tarifa_facturada: float
+    cantidad: float
+
+
+class TarifaDistinta(BaseModel):
+    """CS-03: precio unitario facturado distinto de la tarifa pactada."""
+    servicio: Servicio
+    tarifa_pactada: float
+    cobros: list[CobroTarifa]
+    monto_observado: float
+
+
+class ExcesoSinSustento(BaseModel):
+    """CS-04: GB de exceso facturados que el consumo registrado no respalda.
+
+    `gb_*_registrados` son None si no hay consumo registrado del periodo.
+    """
+    servicio: Servicio
+    periodo: str
+    numero_factura: str
+    gb_facturados: float
+    precio_gb: float
+    gb_incluidos_registrados: float | None
+    gb_usados_registrados: float | None
+    gb_exceso_registrados: float | None
+    monto_observado: float
+
+
+class AveriaSlaIncumplido(BaseModel):
+    """CS-05 / CS-07: caída por encima de la tolerancia del SLA, sin compensación.
+
+    `monto_observado` = tarifa pactada × unidades afectadas × horas fuera ÷ 720.
+    No incluye la causa técnica de la avería (el PDF prohíbe comunicarla).
+    """
+    servicio: Servicio
+    id_averia: int
+    periodo: str
+    fecha_inicio: str
+    fecha_fin: str
+    unidades_afectadas: int
+    horas_caida: float
+    tolerancia_horas: float
+    horas_fuera_de_sla: float
+    monto_observado: float
+
+
+class AnomaliasCliente(BaseModel):
+    """Anomalías detectadas con las vistas de `db/schema.sql`, solo del cliente.
+
+    Los montos son sin IGV y describen lo observado: no son una promesa de
+    devolución ni un ajuste aprobado. Excluye facturas anuladas y averías que
+    ya tienen un ajuste propuesto, aprobado o aplicado.
+    """
+    fecha_corte: str
+    cantidad: int
+    facturas_duplicadas: list[FacturaDuplicada]
+    servicios_baja_facturados: list[ServicioBajaFacturado]
+    tarifas_distintas: list[TarifaDistinta]
+    excesos_sin_sustento: list[ExcesoSinSustento]
+    averias_sla_incumplido: list[AveriaSlaIncumplido]

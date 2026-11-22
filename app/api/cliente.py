@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from app.auth.sesion import cliente_actual
 from app.data import facturacion
 from app.schemas import (
+    AnomaliasCliente,
     Cliente,
     ComparacionPeriodos,
     FacturaDetalle,
@@ -128,3 +129,12 @@ def mis_servicios(
 ):
     """Servicios contratados: tarifa pactada (sin IGV), SLA, fecha de alta y de baja."""
     return _400(facturacion.obtener_servicios, cliente_id, estado)
+
+
+@router.get("/anomalias", response_model=AnomaliasCliente)
+def mis_anomalias(cliente_id: int = Depends(cliente_actual)):
+    """Anomalías detectadas: duplicados, bajas facturadas, tarifas distintas, excesos y SLA.
+
+    Montos sin IGV y observados: no son una devolución ni un ajuste aprobado.
+    """
+    return facturacion.detectar_anomalias(cliente_id)

@@ -146,12 +146,44 @@ usa el mes anterior a `periodo_b`. Excluye facturas anuladas.
   se repite igual cada mes (por ejemplo, el servicio dado de baja de CS-02)
   sale como "sin cambio"; eso lo detectará `detectar_anomalias`.
 
+### `detectar_anomalias(cliente_id) -> AnomaliasCliente`
+
+Anomalías de facturación y SLA del cliente, a partir de las vistas de
+detección de `db/schema.sql` (filtradas siempre por `cliente_id`).
+
+| Grupo | Casuística | Vista | Qué trae además |
+|---|---|---|---|
+| `facturas_duplicadas` | CS-01 | `v_facturas_duplicadas` | Las facturas iguales con número e importes |
+| `servicios_baja_facturados` | CS-02 | `v_servicios_baja_facturados` | El servicio (fecha de baja) y un cobro por periodo posterior a la baja |
+| `tarifas_distintas` | CS-03 | `v_tarifa_distinta` | Tarifa pactada y, por periodo, la facturada y la cantidad |
+| `excesos_sin_sustento` | CS-04 | `v_exceso_sin_sustento` | GB facturados, precio por GB y consumo registrado (incluidos, usados, exceso) |
+| `averias_sla_incumplido` | CS-05, CS-07 | `v_averias_sin_compensar` | Fechas de la caída, horas, tolerancia y horas fuera de SLA |
+
+- **Montos:** `monto_observado`, sin IGV. El nombre es neutro a propósito:
+  las vistas lo llaman `monto_a_acreditar`, y el PDF prohíbe prometer una
+  devolución (CS-01, CS-02). No es un ajuste aprobado.
+- **Agrupado por servicio:** CS-02 y CS-03 traen un cobro por periodo y el
+  total ya sumado (24 000 y 13 500), para que el agente no sume a mano.
+- **CS-01:** `monto_observado` es el importe de las facturas de más
+  (subtotal × (n − 1)), sin decir cuál vale.
+- **CS-05 frente a CS-07:** la distinción es por monto y tramo, que decide
+  `calcular_ajuste` (pendiente); aquí ambas son `averias_sla_incumplido`.
+- **No expone la causa técnica** de la avería (`averia.causa`): el PDF prohíbe
+  comunicarla.
+- **Ya resuelto:** excluye facturas anuladas y averías con un ajuste
+  propuesto, aprobado o aplicado. Las demás vistas **no** miran ajustes ni
+  casos: cuando exista "registrar caso", una anomalía ya registrada seguirá
+  apareciendo (ver `PENDIENTES_datos.md`).
+- **Datos sembrados:** clientes 1 a 6, una anomalía cada uno; los controles
+  (25, 30 y los duplicados anulados de 15, 24 y 38) no aparecen.
+- **Uso en el agente:** paso 3 del método del PDF ("busca anomalías").
+
 ## 3. Casuísticas y funciones
 
 | Casuística | Función principal | Comentario |
 |---|---|---|
-| CS-01 Factura duplicada | `listar_facturas`, `detalle_factura` | Saldo, resumen y comparación marcan el periodo en `periodos_multiples` / `facturas_multiples` sin sumar. La detección con igual importe está en `v_facturas_duplicadas` (aún sin función). |
-| CS-02 a CS-05, CS-07 | `detalle_factura`, `obtener_servicios` | Servicios dan la referencia (baja, tarifa pactada, SLA, GB). La detección (vistas) y el cálculo de ajustes están pendientes. |
+| CS-01 Factura duplicada | `detectar_anomalias`, `listar_facturas` | Saldo, resumen y comparación marcan el periodo en `periodos_multiples` / `facturas_multiples` sin sumar. |
+| CS-02 a CS-05, CS-07 | `detectar_anomalias`, `obtener_servicios`, `detalle_factura` | Detección y monto observado. El tramo y el aprobador (`calcular_ajuste`) están pendientes. |
 | CS-06 Solicitud fuera de plazo | — | Pendiente (`solicitud`, `v_solicitudes_vencidas`). |
 | CS-08 Gesto comercial | — | Pendiente (`v_gestos_mes_actual`). |
 | CS-09 Variación de facturación | `comparar_periodos` | Líneas que cambiaron y su servicio (alta o baja). |

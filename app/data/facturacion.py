@@ -12,9 +12,15 @@ from pathlib import Path
 from app import config
 from app.data.conexion import get_connection
 from app.schemas import (
+    AnomaliasCliente,
+    AveriaSlaIncumplido,
     Cliente,
+    CobroObservado,
+    CobroTarifa,
     ComparacionPeriodos,
+    ExcesoSinSustento,
     FacturaDetalle,
+    FacturaDuplicada,
     FacturaResumen,
     LineaComparada,
     LineaFactura,
@@ -27,6 +33,8 @@ from app.schemas import (
     ResumenPeriodo,
     SaldoPendiente,
     Servicio,
+    ServicioBajaFacturado,
+    TarifaDistinta,
 )
 
 ESTADOS_FACTURA = {"emitida", "pagada", "vencida", "en_disputa", "anulada"}
@@ -457,3 +465,145 @@ def comparar_periodos(
         variacion_fuerte=None if pct is None else abs(pct) > UMBRAL_VARIACION_PCT,
         lineas=lineas, lineas_sin_cambio=sin_cambio,
     )
+
+
+# ------------------------------------------------- anomalías detectadas
+
+def _agrupar_por_servicio(filas) -> dict[int, list]:
+    grupos: dict[int, list] = {}
+    for fila in filas:
+        grupos.setdefault(fila["id_servicio"], []).append(fila)
+    return grupos
+
+
+def _duplicadas(con, cliente_id: int) -> list[FacturaDuplicada]:
+    filas = con.execute(
+        "SELECT periodo, subtotal, n_facturas FROM v_facturas_duplicadas WHERE id_cliente = ? ORDER BY periodo",
+        (cliente_id,),
+    ).fetchall()
+    vigentes = _facturas_vigentes(con, cliente_id, [f["periodo"] for f in filas])
+    resultado = []
+    for f in filas:
+        iguales = [x for x in vigentes[f["periodo"]] if abs(x.subtotal - f["subtotal"]) < 0.005]
+        resultado.append(FacturaDuplicada(
+            periodo=f["periodo"], facturas=iguales,
+            monto_observado=round(f["subtotal"] * (f["n_facturas"] - 1), 2),
+        ))
+    return resultado
+
+
+def _bajas_facturadas(con, cliente_id: int, servicios: dict[int, Servicio]) -> list[ServicioBajaFacturado]:
+    filas = con.execute(
+        """
+        SELECT v.id_servicio, v.periodo, f.numero, v.monto_a_acreditar AS monto
+        FROM v_servicios_baja_facturados v
+        JOIN factura f ON f.id_factura = v.id_factura AND f.id_cliente = v.id_cliente
+        WHERE v.id_cliente = ?
+        ORDER BY v.id_servicio, v.periodo
+        """,
+        (cliente_id,),
+    ).fetchall()
+    resultado = []
+    for id_servicio, grupo in _agrupar_por_servicio(filas).items():
+        cobros = [CobroObservado(periodo=g["periodo"], numero_factura=g["numero"], monto_observado=round(g["monto"], 2))
+                  for g in grupo]
+        resultado.append(ServicioBajaFacturado(
+            servicio=servicios[id_servicio], cobros=cobros,
+            monto_observado=_suma(c.monto_observado for c in cobros),
+        ))
+    return resultado
+
+
+def _tarifas_distintas(con, cliente_id: int, servicios: dict[int, Servicio]) -> list[TarifaDistinta]:
+    filas = con.execute(
+        """
+        SELECT v.id_servicio, v.periodo, f.numero, v.tarifa_pactada, v.tarifa_facturada, v.cantidad, v.diferencia
+        FROM v_tarifa_distinta v
+        JOIN factura f ON f.id_factura = v.id_factura AND f.id_cliente = v.id_cliente
+        WHERE v.id_cliente = ?
+        ORDER BY v.id_servicio, v.periodo
+        """,
+        (cliente_id,),
+    ).fetchall()
+    resultado = []
+    for id_servicio, grupo in _agrupar_por_servicio(filas).items():
+        cobros = [CobroTarifa(periodo=g["periodo"], numero_factura=g["numero"], monto_observado=g["diferencia"],
+                              tarifa_facturada=g["tarifa_facturada"], cantidad=g["cantidad"]) for g in grupo]
+        resultado.append(TarifaDistinta(
+            servicio=servicios[id_servicio], tarifa_pactada=grupo[0]["tarifa_pactada"], cobros=cobros,
+            monto_observado=_suma(c.monto_observado for c in cobros),
+        ))
+    return resultado
+
+
+def _excesos_sin_sustento(con, cliente_id: int, servicios: dict[int, Servicio]) -> list[ExcesoSinSustento]:
+    filas = con.execute(
+        """
+        SELECT v.id_servicio, v.periodo, f.numero, v.gb_facturados, v.monto_a_acreditar AS monto,
+               l.precio_unitario AS precio_gb,
+               c.gb_incluidos, c.gb_usados, c.exceso_gb
+        FROM v_exceso_sin_sustento v
+        JOIN factura f ON f.id_factura = v.id_factura AND f.id_cliente = v.id_cliente
+        JOIN factura_linea l ON l.id_factura = v.id_factura AND l.id_servicio = v.id_servicio AND l.tipo = 'exceso'
+        LEFT JOIN consumo c ON c.id_servicio = v.id_servicio AND c.periodo = v.periodo
+        WHERE v.id_cliente = ?
+        ORDER BY v.periodo, v.id_servicio
+        """,
+        (cliente_id,),
+    ).fetchall()
+    return [
+        ExcesoSinSustento(
+            servicio=servicios[f["id_servicio"]], periodo=f["periodo"], numero_factura=f["numero"],
+            gb_facturados=f["gb_facturados"], precio_gb=f["precio_gb"],
+            gb_incluidos_registrados=f["gb_incluidos"], gb_usados_registrados=f["gb_usados"],
+            gb_exceso_registrados=f["exceso_gb"], monto_observado=round(f["monto"], 2),
+        )
+        for f in filas
+    ]
+
+
+def _averias_sla(con, cliente_id: int, servicios: dict[int, Servicio]) -> list[AveriaSlaIncumplido]:
+    # Sin a.causa: el PDF prohíbe comunicar causas técnicas (CS-05).
+    filas = con.execute(
+        """
+        SELECT v.id_averia, v.id_servicio, v.periodo, a.fecha_inicio, a.fecha_fin, v.unidades_afectadas,
+               v.horas_caida, v.tolerancia_h, v.horas_fuera, v.descuento_sin_igv
+        FROM v_averias_sin_compensar v
+        JOIN averia a ON a.id_averia = v.id_averia
+        WHERE v.id_cliente = ?
+        ORDER BY a.fecha_inicio
+        """,
+        (cliente_id,),
+    ).fetchall()
+    return [
+        AveriaSlaIncumplido(
+            servicio=servicios[f["id_servicio"]], id_averia=f["id_averia"], periodo=f["periodo"],
+            fecha_inicio=f["fecha_inicio"], fecha_fin=f["fecha_fin"],
+            unidades_afectadas=f["unidades_afectadas"], horas_caida=f["horas_caida"],
+            tolerancia_horas=f["tolerancia_h"], horas_fuera_de_sla=f["horas_fuera"],
+            monto_observado=f["descuento_sin_igv"],
+        )
+        for f in filas
+    ]
+
+
+def detectar_anomalias(cliente_id: int, db_path: Path | None = None) -> AnomaliasCliente:
+    """Anomalías de facturación y SLA del cliente (CS-01 a CS-05 y CS-07).
+
+    Usa las vistas de detección de `db/schema.sql`, siempre filtradas por
+    `cliente_id`. Los cobros de un mismo servicio se agrupan con su total, para
+    que nadie tenga que sumar periodos a mano. Los montos son sin IGV y son lo
+    observado, no una devolución ni un ajuste aprobado.
+    """
+    _validar_cliente_id(cliente_id)
+    with get_connection(db_path) as con:
+        servicios = {s.id_servicio: s for s in _servicios(con, cliente_id)}
+        grupos = dict(
+            facturas_duplicadas=_duplicadas(con, cliente_id),
+            servicios_baja_facturados=_bajas_facturadas(con, cliente_id, servicios),
+            tarifas_distintas=_tarifas_distintas(con, cliente_id, servicios),
+            excesos_sin_sustento=_excesos_sin_sustento(con, cliente_id, servicios),
+            averias_sla_incumplido=_averias_sla(con, cliente_id, servicios),
+        )
+        fecha_corte = _fecha_actual(con)
+    return AnomaliasCliente(fecha_corte=fecha_corte, cantidad=sum(len(g) for g in grupos.values()), **grupos)
