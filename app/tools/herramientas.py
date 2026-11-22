@@ -10,17 +10,18 @@ Reglas (ver `PENDIENTES_rag.md`, sección 2, y `docs/casuisticas_api.md`):
 - Los argumentos que el modelo envía se filtran a los del esquema.
 - Un error (dato inválido, factura de otro cliente, caso sin anomalía) vuelve como
   `{"error": ...}` para que el modelo lo explique, sin romper el turno.
-- `registrar_caso` usa siempre el canal `web` y, si el modelo no las pasa, las
-  palabras del cliente del turno actual.
+- `registrar_caso` usa el canal de la conversación (`web` o `telegram`), que pone el
+  código, nunca el modelo; y, si el modelo no las pasa, las palabras del cliente del
+  turno actual.
 """
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any, Callable, get_args
 
 from pydantic import BaseModel, ValidationError
 
 from app.data import casos, facturacion
-from app.schemas.casos import NuevoCaso
+from app.schemas.casos import Canal, NuevoCaso
 
 # Esquemas en el formato del router (nombre, descripción, parámetros JSON Schema).
 # Descripciones cortas: cada palabra se paga en cada llamada al modelo.
@@ -120,15 +121,18 @@ def _json(valor: Any) -> Any:
 class Herramientas:
     """Herramientas atadas a un cliente ya verificado."""
 
-    def __init__(self, cliente_id: int, palabras_cliente: str = "") -> None:
+    def __init__(self, cliente_id: int, palabras_cliente: str = "", canal: Canal = "web") -> None:
         if not isinstance(cliente_id, int) or cliente_id <= 0:
             raise ValueError("cliente_id inválido")
+        if canal not in get_args(Canal):
+            raise ValueError(f"canal inválido: {canal!r}")
         self._cliente_id = cliente_id
         self._palabras = palabras_cliente
+        self._canal = canal
 
     def _registrar_caso(self, tipo: str, resumen: str | None = None, **referencias: Any) -> Any:
         nuevo = NuevoCaso(
-            tipo=tipo, canal="web",
+            tipo=tipo, canal=self._canal,
             palabras_cliente=(self._palabras or resumen or tipo)[:2000],
             resumen=resumen,
             referencias={k: v for k, v in referencias.items() if k in _REFERENCIAS and v not in (None, "")},

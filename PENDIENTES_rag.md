@@ -116,5 +116,5 @@ prometería cosas que el sistema no hace.
       cálculo (detalle en `PENDIENTES_datos.md`, sección 3).
 - [ ] Historial de la conversación: hoy `interaccion_log` solo se escribe al
       registrar un caso. Decidir si el bot guarda cada turno y quién lo escribe.
-- [ ] Bot de Telegram: no existe aún. El RAG y las herramientas se pueden
-      desarrollar y probar sin él (canal `web`).
+- [x] Bot de Telegram (rama `feat/telegram`): mismo agente y misma identificación que
+      la web, casos con canal `telegram`. Plan y estado en `PENDIENTES_telegram.md`.

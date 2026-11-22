@@ -17,7 +17,7 @@ cuándo, qué poner en tu `.env` y qué hacer después de cada cambio.
 6. [Variables de entorno (`.env`)](#variables-de-entorno-env)
 7. [Instalación manual (sin `.bat`, Linux o macOS)](#instalación-manual-sin-bat-linux-o-macos)
 8. [Estructura del proyecto](#estructura-del-proyecto)
-9. [Referencia: identificación, API, RAG y datos](#referencia)
+9. [Referencia: identificación, API, chat, bot de Telegram, RAG y datos](#referencia)
 
 ---
 
@@ -50,9 +50,10 @@ El RAG **nunca** es fuente de un monto, una fecha o un estado del cliente.
 |---|---|
 | Base de datos con las casuísticas CS-01 a CS-13 | Alinear `faq.json` con el modo A y su clasificador |
 | Identificación por RUC + código OTP al correo | Evaluación por casuística y calibración del umbral |
-| API del cliente autenticado (`/mi/...`) | Bot de Telegram (opcional) |
+| API del cliente autenticado (`/mi/...`) | |
 | RAG con filtro de modo A y banco de pruebas web (`/dev/rag`) | |
 | Chat web (`/chat`) con herramientas, RAG y panel de traza | |
+| Bot de Telegram con la misma identificación y el mismo agente | |
 
 Detalle de lo pendiente: [`PENDIENTES_rag.md`](PENDIENTES_rag.md).
 
@@ -60,14 +61,15 @@ Detalle de lo pendiente: [`PENDIENTES_rag.md`](PENDIENTES_rag.md).
 
 ## Los scripts `.bat`
 
-Cuatro scripts en la raíz, para Windows. Se ejecutan con doble clic o desde una
+Cinco scripts en la raíz, para Windows. Se ejecutan con doble clic o desde una
 terminal en la carpeta del proyecto.
 
 | Script | Objetivo | Cuándo |
 |---|---|---|
 | `install.bat` | Dejar el entorno listo: Python, dependencias, `.env`, secreto, base, índice del RAG y pruebas | La primera vez, y después de un `git pull` que cambie `requirements.txt` |
 | `regenerar_base.bat` | Borrar y volver a crear `db\anticipa.db` con los correos de tu `.env` | Después de poner tu correo en `.env`, y cuando cambie la base en el repositorio |
-| `run.bat` | Levantar la API para probarla | Cada vez que quieras usar la API o el banco de pruebas |
+| `run.bat` | Levantar la API para probarla (sin el bot de Telegram) | Cada vez que quieras usar la API o el banco de pruebas |
+| `run_telegram.bat` | Levantar la API **con** el bot de Telegram | Cuando quieras probar o mostrar el bot (necesita `TELEGRAM_BOT_TOKEN`) |
 | `clientes_prueba.bat` | Ver los RUC de prueba, su casuística y a qué correo llega el código | Cuando necesites un RUC para probar (identificación, `/docs`, el chat) |
 
 ### `install.bat`
@@ -108,7 +110,16 @@ Levanta la API en `http://127.0.0.1:8000` (o en otro puerto: `run.bat 8001`).
 - Avisa si el puerto ya está ocupado y sugiere otro.
 - Muestra las direcciones útiles: `/docs` (documentación interactiva) y, con
   `ENTORNO=dev`, `/dev/rag` (banco de pruebas del RAG).
+- **No levanta el bot de Telegram**, aunque haya token en `.env`: muestra
+  `Telegram: apagado`. Así, levantar una o dos APIs para probar no arranca bots sin querer.
 - Se detiene con `Ctrl+C`.
+
+### `run_telegram.bat`
+
+Lo mismo que `run.bat` (acepta el puerto: `run_telegram.bat 8001`), pero **con el bot de
+Telegram**. Muestra si el bot quedó activo y si responde solo a la lista de usuarios
+permitidos o a cualquiera. Si otra API de tu PC ya tiene el bot de ese token, esta
+arranca sin bot y lo avisa (`Telegram: sin bot: otra API de esta PC ya lo tiene`).
 
 ### `clientes_prueba.bat`
 
@@ -284,6 +295,8 @@ suyo. `.env.example` es solo la plantilla: la app no lo lee, y si cambia no actu
 | `NOMBRE_PRUEBA_1` … `NOMBRE_PRUEBA_5` | Nombre del contacto (opcional; el chat saluda con el primer nombre) |
 | `SMTP_HOST`, `SMTP_PORT` (`587`), `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_REMITENTE` | Cuenta que envía el código OTP. Puerto 465 = SSL; otro = STARTTLS |
 | `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` | Modelo del chat (cualquier endpoint compatible; el equipo usa DeepSeek). Sin ellos, `/chat` responde que el asistente no está disponible. Respaldos: `LLM_2_*` … `LLM_9_*` |
+| `TELEGRAM_BOT_TOKEN` | Opcional. Token de tu bot (@BotFather → `/newbot`). Vacío = sin bot. Es un secreto: si se filtra, @BotFather → `/revoke`. Ver [Bot de Telegram](#bot-de-telegram-apptelegram) |
+| `TELEGRAM_USUARIOS_PERMITIDOS` | IDs numéricos de Telegram que pueden usar el bot, separados por coma (el tuyo te lo da @userinfobot). Vacío = responde a cualquiera que encuentre el bot. Un valor mal escrito impide arrancar la API |
 
 ### La que genera `install.bat`
 
@@ -319,8 +332,10 @@ suyo. `.env.example` es solo la plantilla: la app no lo lee, y si cambia no actu
 | `CHAT_MAX_VUELTAS` | `3` | Llamadas al modelo con herramientas por turno (más una para cerrar) |
 | `CHAT_MAX_MENSAJES` | `8` | Mensajes previos que se reenvían en cada turno: más memoria, más tokens |
 | `CHAT_MAX_CONVERSACIONES` | `200` | Conversaciones que se guardan en memoria a la vez; al pasar el tope se olvida la más antigua |
-| `CHAT_MAX_TOKENS`, `CHAT_TEMPERATURA` | `600`, `0.3` | Largo máximo y variabilidad de cada respuesta del modelo |
+| `CHAT_MAX_TOKENS`, `CHAT_TEMPERATURA` | `1500`, `0.3` | Largo máximo (incluye el razonamiento en los modelos que razonan; si se corta, se reintenta una vez con el doble) y variabilidad de cada respuesta del modelo |
 | `CHUNK_MAX_PALABRAS`, `CHUNK_OVERLAP_PALABRAS` | `150`, `25` | Tamaño y solape de los fragmentos de prosa |
+| `TELEGRAM_MAX_SOLICITUDES`, `TELEGRAM_VENTANA_SEG` | `5`, `900` | Códigos que un chat de Telegram puede pedir en la ventana |
+| `TELEGRAM_HILOS` | `4` | Chats de Telegram atendidos en paralelo (los mensajes de un mismo chat van en orden) |
 
 ---
 
@@ -340,6 +355,7 @@ python -X utf8 db/generar_datos.py   # = regenerar_base.bat (termina con validac
 python -X utf8 -m scripts.preparar_rag
 python -m pytest -q
 python -m uvicorn app.main:app       # = run.bat
+TELEGRAM_ACTIVO=1 python -m uvicorn app.main:app   # = run_telegram.bat
 ```
 
 `db/generar_datos.py` **borra la base existente** antes de recrearla y necesita
@@ -350,7 +366,7 @@ python -m uvicorn app.main:app       # = run.bat
 ## Estructura del proyecto
 
 ```
-install.bat, run.bat, regenerar_base.bat, clientes_prueba.bat   # scripts de Windows
+install.bat, run.bat, run_telegram.bat, regenerar_base.bat, clientes_prueba.bat   # scripts de Windows
 app/
   main.py        # FastAPI: /health, /auth, /mi; con ENTORNO=dev, /api y /dev/rag
   config.py      # configuración desde variables de entorno (.env)
@@ -363,8 +379,9 @@ app/
   static/        # página del banco de pruebas
   agente/        # prompt del sistema y turno del chat (RAG previo + herramientas)
   tools/         # herramientas del agente: datos del cliente desde app/data
+  telegram/      # bot de Telegram: sesiones (RUC + código), long polling y formato
 db/              # schema.sql, generar_datos.py y la base generada (anticipa.db)
-docs/            # PDF de conocimiento y documentación de la capa de datos
+docs/            # PDF de conocimiento, capa de datos y reglas de seguridad del bot
 scripts/         # demo_otp.py, preparar_rag.py, clientes_prueba.py, probar_chat.py
 tests/           # pytest
 catalogo.json    # catálogo de casuísticas, servicios y políticas
@@ -477,6 +494,54 @@ sirvió desde su caché, que cobra más barato).
 **Costo aproximado por turno:** ~3 400 tokens de entrada por llamada (prompt ~900,
 herramientas ~1 000, historial y contexto). Una pregunta de datos usa 2 llamadas
 (pedir la herramienta y responder); una de glosario, 1.
+
+### Bot de Telegram (`app/telegram`)
+
+El mismo agente del chat web, por Telegram. Se levanta con `run_telegram.bat` (la API
+más el bot); `run.bat` lo deja apagado aunque haya token. Reglas de seguridad:
+[`docs/telegram_seguridad.md`](docs/telegram_seguridad.md).
+
+**Crear tu bot de prueba (una vez):**
+
+1. En Telegram, abre **@BotFather**, envía `/newbot`, elige un nombre y un usuario que
+   termine en `bot`. Copia el token en tu `.env` como `TELEGRAM_BOT_TOKEN`.
+2. Abre **@userinfobot**, copia tu ID numérico y ponlo en `TELEGRAM_USUARIOS_PERMITIDOS`.
+3. Con el SMTP configurado y tu correo en `CORREO_PRUEBA_n`, levanta la API con
+   `run_telegram.bat`. Debe decir `Telegram: bot activo, solo usuarios de ...`.
+
+**Un solo bot por token.** Telegram admite un solo proceso leyendo mensajes por token:
+si hay dos, se reparten los mensajes.
+
+- **En tu PC** está cubierto: solo `run_telegram.bat` enciende el bot, y un candado local
+  (un archivo bloqueado en la carpeta temporal, con un hash del token en el nombre)
+  impide que una segunda API tome el mismo token.
+- **Entre PC** no hay candado posible: **cada integrante usa su propio bot**. Si dos
+  personas usan el mismo token, la consola avisa `telegram.conflicto`. Para una demo
+  compartida, una persona levanta `run_telegram.bat` y pone los correos y los IDs del
+  equipo en su `.env`.
+
+**Conversación:**
+
+| Mensaje | Qué hace |
+|---|---|
+| `/start` | Pide el RUC (y cierra la sesión anterior, si había) |
+| RUC (11 dígitos) | Envía el código al correo de facturación. Misma respuesta exista o no el RUC |
+| Código (6 dígitos) | Verifica con el mismo OTP de la web; el bot borra ese mensaje y saluda revisando la cuenta |
+| Cualquier texto, ya identificado | Va al agente (`ServicioChat`, igual que `/chat`); los casos quedan con `canal = telegram` |
+| `/nuevo` | Empieza una conversación nueva (borra la memoria del agente) |
+| `/salir` | Cierra la sesión |
+
+- **Solo chats privados y solo texto.** En grupos no responde; a fotos o audios responde
+  que solo atiende texto. A quien no está en la lista de permitidos no le responde nada.
+- **Sesión:** vence a los `AUTH_MINUTOS_SESION`, como la web, y vive en memoria: se
+  pierde al reiniciar la API. El límite de códigos es por chat
+  (`TELEGRAM_MAX_SOLICITUDES`).
+- **Respuestas:** en HTML (las `**negritas**` del modelo) y partidas en mensajes de hasta
+  4096 caracteres. Los mensajes que llegaron con la API apagada se descartan al arrancar.
+- **Logs:** la consola muestra avisos y errores (`telegram.*`); nunca el token ni el
+  código. El panel de traza de la web no existe en Telegram.
+- **Borrar lo que se ve en el chat:** desde la app de Telegram (menú del chat → Borrar
+  historial). `/nuevo` y `/salir` borran la memoria del agente, no los mensajes.
 
 ### RAG (`app/rag`)
 

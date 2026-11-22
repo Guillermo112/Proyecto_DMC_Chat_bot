@@ -114,6 +114,41 @@ def test_rag_caido_no_tumba_el_chat():
 
 
 # -- API -------------------------------------------------------------------------
+def test_canal_del_turno_llega_al_caso(indice, tmp_path, monkeypatch):
+    """El turno del bot registra el caso con canal telegram; la web sigue con web."""
+    import shutil
+    import sqlite3
+
+    copia = tmp_path / "anticipa.db"
+    shutil.copy(config.DB_PATH, copia)
+    monkeypatch.setattr(config, "DB_PATH", copia)
+    monkeypatch.setattr(config, "NOTIFICAR_DERIVACIONES", False)
+    servicio = ServicioChat(router=RouterFalso(
+        _herramienta("registrar_caso", {"tipo": "factura_duplicada", "numero_factura": "F001-000255",
+                                        "canal": "web"}),
+        _texto("Registré tu caso."),
+    ), indice=indice)
+
+    turno = servicio.responder(1, "123456789", "Me llegaron dos facturas iguales", canal="telegram")
+
+    [h] = turno.herramientas
+    assert h["ok"], h["resultado"]
+    canal, = sqlite3.connect(copia).execute("SELECT canal FROM caso ORDER BY id_caso DESC LIMIT 1").fetchone()
+    assert canal == "telegram"
+
+
+def test_responder_usa_web_por_defecto(indice):
+    recibidos = []
+
+    def fabrica(cliente_id, mensaje, canal):
+        recibidos.append(canal)
+        from app.tools import Herramientas
+        return Herramientas(cliente_id, mensaje, canal=canal)
+
+    ServicioChat(router=RouterFalso(_texto("hola")), indice=indice, herramientas=fabrica).responder(1, "c1", "hola")
+    assert recibidos == ["web"]
+
+
 @pytest.fixture
 def cliente_api(indice):
     def _usar(router):
@@ -209,3 +244,56 @@ def test_api_saludo(cliente_api):
     assert c.post("/mi/chat/saludo", json={"conversacion_id": "abc"}).status_code == 401
     r = c.post("/mi/chat/saludo", json={"conversacion_id": "abc"}, headers=_token(11))
     assert r.status_code == 200 and "¿Qué quieres hacer hoy?" in r.json()["respuesta"]
+
+
+# -- respuestas cortadas por max_tokens ------------------------------------------------
+
+def _cortada(texto="", tool_calls=None):
+    return RespuestaLLM(texto=texto, tool_calls=tool_calls or [], cortada=True, modelo="falso",
+                        uso={"prompt_tokens": 10, "completion_tokens": 600})
+
+
+class RouterConTopes(RouterFalso):
+    """Además guarda el max_tokens de cada llamada."""
+
+    def __init__(self, *respuestas):
+        super().__init__(*respuestas)
+        self.topes = []
+
+    def chat(self, mensajes, tools=None, **kw):
+        self.topes.append(kw.get("max_tokens"))
+        return super().chat(mensajes, tools=tools, **kw)
+
+
+def test_respuesta_cortada_se_reintenta_con_el_doble(indice, monkeypatch, caplog):
+    monkeypatch.setattr(config, "CHAT_MAX_TOKENS", 1000)
+    router = RouterConTopes(_cortada("Entiendo tu molestia. Pero sí puedo dejar"), _texto("Respuesta completa."))
+    turno = ServicioChat(router=router, indice=indice).responder(1, "c1", "hola")
+    assert turno.texto == "Respuesta completa."
+    assert router.topes == [1000, 2000] and turno.llamadas == 2
+    assert "chat.respuesta_cortada" in caplog.text
+
+
+def test_cortada_dos_veces_se_recorta_a_la_ultima_oracion(indice):
+    from app.agente.chat import CORTADA
+
+    router = RouterConTopes(_cortada("Tus casos ya están registrados. No hace falta volver a"),
+                            _cortada("Tus casos ya están registrados. No hace falta volver a"))
+    turno = ServicioChat(router=router, indice=indice).responder(1, "c1", "hola")
+    assert turno.texto == f"Tus casos ya están registrados.\n\n{CORTADA}"
+
+
+def test_cortada_sin_oracion_completa(indice):
+    from app.agente.chat import SIN_RESPUESTA
+
+    router = RouterConTopes(_cortada(""), _cortada("Entiendo tu"))
+    assert ServicioChat(router=router, indice=indice).responder(1, "c1", "hola").texto == SIN_RESPUESTA
+
+
+def test_herramienta_cortada_tambien_se_reintenta(indice):
+    """Una herramienta pedida con la salida cortada puede traer argumentos rotos."""
+    router = RouterConTopes(_cortada(tool_calls=[{"id": "t1", "name": "ver_saldo", "arguments": {}}]),
+                            _herramienta("ver_saldo"), _texto("Tu saldo es S/ 10,00."))
+    turno = ServicioChat(router=router, indice=indice).responder(1, "c1", "¿Cuánto debo?")
+    assert turno.texto == "Tu saldo es S/ 10,00." and turno.llamadas == 3
+    assert [h["nombre"] for h in turno.herramientas] == ["ver_saldo"]

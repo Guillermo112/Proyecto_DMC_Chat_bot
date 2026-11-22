@@ -27,3 +27,12 @@ def _limite_por_ip_limpio():
     limitador_solicitudes.reiniciar()
     yield
     limitador_solicitudes.reiniciar()
+
+
+@pytest.fixture(autouse=True)
+def _sin_bot_de_telegram(monkeypatch):
+    """Los tests nunca levantan el bot real con el token del .env de quien los corre
+    (el lifespan de la app lo arrancaría y saldría a la red)."""
+    monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", "")
+    monkeypatch.setattr(config, "TELEGRAM_ACTIVO", False)
+    monkeypatch.setattr(config, "TELEGRAM_USUARIOS_PERMITIDOS", frozenset())

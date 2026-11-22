@@ -55,7 +55,8 @@ from app.data.anticipa_crud_por_entidad import (
 @asynccontextmanager
 async def ciclo_de_vida(_: FastAPI):
     """Precarga el índice del RAG en segundo plano: la API abre al instante y el primer
-    mensaje del chat no espera los ~10 s de leer los PDF y cargar el modelo."""
+    mensaje del chat no espera los ~10 s de leer los PDF y cargar el modelo.
+    Si hay token, levanta también el bot de Telegram y lo detiene al cerrar."""
     def _precargar() -> None:
         try:
             from app.rag.indice import obtener_indice
@@ -67,7 +68,15 @@ async def ciclo_de_vida(_: FastAPI):
 
     if config.RAG_PRECARGAR:
         threading.Thread(target=_precargar, daemon=True, name="precargar-rag").start()
-    yield
+    # Bot de Telegram en un hilo, solo si hay TELEGRAM_BOT_TOKEN (app/telegram/bot.py).
+    from app.telegram.bot import arrancar
+
+    bot = arrancar()
+    try:
+        yield
+    finally:
+        if bot is not None:
+            bot.detener()
 
 
 app = FastAPI(
