@@ -53,3 +53,34 @@ CORREO_DERIVACIONES = os.getenv("CORREO_DERIVACIONES", "").strip()
 # Límite de peticiones a /auth/solicitar-codigo por IP (ventana deslizante).
 AUTH_MAX_SOLICITUDES_POR_IP = int(os.getenv("AUTH_MAX_SOLICITUDES_POR_IP", "5"))
 AUTH_VENTANA_SOLICITUDES_SEG = int(os.getenv("AUTH_VENTANA_SOLICITUDES_SEG", "900"))
+
+# --- RAG (app/rag) ----------------------------------------------------------
+# Fuentes del índice de documentos. faq.json NO entra: va a su propio clasificador.
+# Los PDF se nombran uno por uno (el 02 mezcla el modo B y se decide aparte).
+RAG_PDFS = [
+    RAIZ_PROYECTO / "docs" / nombre.strip()
+    for nombre in os.getenv(
+        "RAG_PDFS",
+        "Anticipa_01_Identidad_y_Atencion.pdf,Anticipa_03_Politicas_Catalogo_Glosario.pdf",
+    ).split(",")
+    if nombre.strip()
+]
+RAG_CATALOGO = RAIZ_PROYECTO / os.getenv("RAG_CATALOGO", "catalogo.json")
+
+# Motor de vectores: auto (denso con respaldo TF-IDF) | denso | tfidf.
+RAG_MOTOR = (os.getenv("RAG_MOTOR") or "auto").strip().lower()
+SENTENCE_TRANSFORMER_MODEL = os.getenv(
+    "SENTENCE_TRANSFORMER_MODEL", "ibm-granite/granite-embedding-97m-multilingual-r2"
+)
+# Similitud mínima para usar un fragmento. Cada motor tiene su escala.
+# Medido con granite 97M y filas de tabla (2026-11-22): relevantes 0,83-0,96,
+# ajenas 0,74-0,81. Margen fino: calibrar con el set de evaluación.
+RAG_UMBRAL = float(os.getenv("RAG_UMBRAL", "0.82"))
+RAG_UMBRAL_TFIDF = float(os.getenv("RAG_UMBRAL_TFIDF", "0.08"))
+# Se recuperan K_INICIAL candidatos y el MMR elige K_FINAL relevantes y distintos.
+RAG_K_INICIAL = int(os.getenv("RAG_K_INICIAL", "8"))
+RAG_K_FINAL = int(os.getenv("RAG_K_FINAL", "3"))
+RAG_MMR_LAMBDA = float(os.getenv("RAG_MMR_LAMBDA", "0.5"))  # 1 = relevancia, 0 = variedad
+# Fragmentación de los PDF (los JSON van un registro por fragmento).
+CHUNK_MAX_PALABRAS = int(os.getenv("CHUNK_MAX_PALABRAS", "150"))
+CHUNK_OVERLAP_PALABRAS = int(os.getenv("CHUNK_OVERLAP_PALABRAS", "25"))
