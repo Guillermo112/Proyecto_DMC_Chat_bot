@@ -58,6 +58,9 @@ Si una variable también está definida en el sistema, gana la del sistema.
 | `ANTICIPA_DB_PATH` | `db/anticipa.db` | Ruta de la base (relativa a la raíz o absoluta) |
 | `LIMITE_POR_DEFECTO` | `20` | Tamaño de página de `listar_facturas` |
 | `LIMITE_MAXIMO` | `100` | Tope de página; valores mayores se recortan |
+| `ENTORNO` | `prod` | `dev` monta el CRUD `/api/...` sin autenticación; otro valor o vacío lo oculta |
+| `AUTH_SECRET` | — | Clave del HMAC del OTP y de la firma del token (mínimo 32 caracteres) |
+| `AUTH_MINUTOS_SESION` | `30` | Duración del token de sesión |
 
 ## Ejecutar
 
@@ -111,8 +114,9 @@ pueden pedir datos de otro cliente (`app/api/cliente.py`, sobre `app/data/factur
 | `GET /mi/saldo` | Saldo pendiente y notas de crédito aplicadas |
 | `GET /mi/resumen?fecha_desde&fecha_hasta` | Totales por periodo (excluye anuladas) |
 
-Las rutas `/api/...` son el CRUD de desarrollo para Postman: no usan token y no
-deben exponerse fuera de localhost.
+Las rutas `/api/...` son el CRUD de desarrollo para Postman: no usan token y
+**solo se montan con `ENTORNO=dev`**. Con cualquier otro valor, o sin definirlo,
+quedan únicamente `/health`, `/auth` y `/mi`.
 
 La tabla `verificacion` no está en el CRUD de `/api/...`: solo se toca vía `/auth`.
 

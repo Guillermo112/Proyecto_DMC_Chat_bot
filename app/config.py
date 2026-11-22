@@ -35,3 +35,7 @@ OTP_ESPERA_REENVIO_SEG = int(os.getenv("OTP_ESPERA_REENVIO_SEG", "60"))
 AUTH_SECRET = os.getenv("AUTH_SECRET", "")
 # Duración del token de sesión tras verificar el código. Sin logout.
 AUTH_MINUTOS_SESION = int(os.getenv("AUTH_MINUTOS_SESION", "30"))
+
+# Entorno: solo "dev" monta el CRUD de desarrollo /api/... (sin autenticación).
+# Sin definir = "prod": si falta en el .env, el CRUD queda oculto (seguro por defecto).
+ENTORNO = (os.getenv("ENTORNO") or "prod").strip().lower()  # vacío = sin definir
