@@ -196,7 +196,8 @@ se cierre antes de leerla. Desde PowerShell se escribe con `.\` delante:
    - `http://127.0.0.1:8000/health` → debe responder `{"status": "OK", "db": "OK"}`.
    - `http://127.0.0.1:8000/docs` → documentación interactiva de la API.
    - `http://127.0.0.1:8000/chat` → **el chat**: identifícate con un RUC de tu slot y el
-     código que llega a tu correo.
+     código que llega a tu correo. Qué preguntarle a cada cliente y qué debería
+     responder: [`docs/guion_demo.md`](docs/guion_demo.md).
    - `http://127.0.0.1:8000/dev/rag` → banco de pruebas del RAG.
 
    Al arrancar, la API carga el índice del RAG en segundo plano (~10 s); si escribes
@@ -252,6 +253,7 @@ se cierre antes de leerla. Desde PowerShell se escribe con `.\` delante:
 |---|---|
 | Descargaste el proyecto por primera vez | [Primera vez](#primera-vez), pasos 1 a 5 |
 | Necesitas un RUC para probar | `clientes_prueba.bat` (o `clientes_prueba.bat copiar N`) |
+| No sabes qué preguntarle al chat, o vas a ensayar la demo | [`docs/guion_demo.md`](docs/guion_demo.md): preguntas por cliente y el guion de 5 minutos |
 | Pusiste o cambiaste tu correo (`CORREO_PRUEBA_n`) o tu nombre en `.env` | `regenerar_base.bat` |
 | Hiciste `git pull` y cambió `requirements.txt` | `install.bat` (instala solo lo que falta) |
 | Hiciste `git pull` y cambió `db/schema.sql` o `db/generar_datos.py` | `regenerar_base.bat` |
