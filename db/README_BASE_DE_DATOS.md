@@ -3,9 +3,18 @@
 Base de datos del chatbot de interacción con clientes y prevención de reclamos de facturación B2B.
 Todo es ficticio: RUC con prefijo 99 y fecha de sistema **2026-12-05**.
 
-> **Correos de prueba:** los clientes 1-7 y 8-13 reciben los correos de `CORREO_PRUEBA_1` y
-> `CORREO_PRUEBA_2` del `.env` de la raíz (no se versionan). Sin definirlos, o con
-> `python3 generar_datos.py --publico`, todos los correos terminan en `.example`.
+> **Correos de prueba:** los clientes 1-13 reciben el OTP en los correos del equipo definidos en
+> `CORREO_PRUEBA_1`..`CORREO_PRUEBA_5` del `.env` de la raíz (no se versionan), en rotación:
+>
+> | Slot | Clientes |
+> |---|---|
+> | 1 | 1, 6, 11 |
+> | 2 | 2, 7, 12 |
+> | 3 | 3, 8, 13 |
+> | 4 | 4, 9 |
+> | 5 | 5, 10 |
+>
+> Un slot vacío, o `python3 generar_datos.py --publico`, deja esos clientes con `facturacion@clienteNN.example`.
 
 ## 1. Instalar SQLite
 Para la consola y una interfaz gráfica:

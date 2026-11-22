@@ -91,11 +91,12 @@ Aún no se emite token de sesión tras verificar.
 Prueba en vivo:
 
 1. En `.env`: `SMTP_*` (con Gmail, una
-   [contraseña de aplicación](https://myaccount.google.com/apppasswords)) y tu
-   correo en `CORREO_PRUEBA_1` (clientes 1-7) y/o `CORREO_PRUEBA_2` (clientes 8-13).
+   [contraseña de aplicación](https://myaccount.google.com/apppasswords)) y tu correo
+   en tu slot `CORREO_PRUEBA_1`..`CORREO_PRUEBA_5`. Clientes por slot: 1 → 1, 6, 11;
+   2 → 2, 7, 12; 3 → 3, 8, 13; 4 → 4, 9; 5 → 5, 10.
 2. Regenera la base: `python -X utf8 db/generar_datos.py`.
 3. `python -X utf8 -m scripts.demo_otp` e ingresa un RUC de esos clientes, p. ej.
-   `99813998698` (cliente 1) o `99488766344` (cliente 8).
+   `99813998698` (cliente 1, slot 1) o `99309114170` (cliente 2, slot 2).
 
 ## Capa de datos (`app/data`)
 
