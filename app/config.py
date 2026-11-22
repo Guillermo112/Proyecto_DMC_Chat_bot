@@ -29,3 +29,7 @@ SMTP_REMITENTE = os.getenv("SMTP_REMITENTE", "") or SMTP_USER
 OTP_MINUTOS_VALIDEZ = int(os.getenv("OTP_MINUTOS_VALIDEZ", "10"))
 OTP_MAX_INTENTOS = int(os.getenv("OTP_MAX_INTENTOS", "3"))
 OTP_ESPERA_REENVIO_SEG = int(os.getenv("OTP_ESPERA_REENVIO_SEG", "60"))
+
+# Clave del HMAC del OTP (y más adelante del JWT de sesión).
+# Vacío = no se pueden emitir códigos (se valida al usarlo, no al importar).
+AUTH_SECRET = os.getenv("AUTH_SECRET", "")

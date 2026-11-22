@@ -1,4 +1,6 @@
 """OTP por correo: sobre una copia de la base y sin enviar correos reales."""
+import hashlib
+import hmac
 import re
 import shutil
 import sqlite3
@@ -47,6 +49,38 @@ def test_codigo_no_se_guarda_en_claro(db):
     with sqlite3.connect(copia) as con:
         guardado = con.execute("SELECT codigo_hash FROM verificacion WHERE id_verificacion = ?", (id_v,)).fetchone()[0]
     assert guardado != _codigo(enviados) and len(guardado) == 64
+
+
+def test_hash_es_hmac_con_el_secreto(db, monkeypatch):
+    copia, enviados, ruc = db
+    id_v, _ = otp.solicitar_codigo(ruc, db_path=copia)
+    codigo = _codigo(enviados)
+    with sqlite3.connect(copia) as con:
+        guardado = con.execute("SELECT codigo_hash FROM verificacion WHERE id_verificacion = ?", (id_v,)).fetchone()[0]
+    # Un SHA-256 sin clave (lo que se guardaba antes) ya no coincide.
+    assert guardado != hashlib.sha256(codigo.encode()).hexdigest()
+    esperado = hmac.new(config.AUTH_SECRET.encode(), codigo.encode(), hashlib.sha256).hexdigest()
+    assert guardado == esperado
+
+
+def test_cambiar_el_secreto_invalida_codigos_pendientes(db, monkeypatch):
+    copia, enviados, ruc = db
+    id_v, _ = otp.solicitar_codigo(ruc, db_path=copia)
+    monkeypatch.setattr(config, "AUTH_SECRET", "otro-secreto-distinto-" + "y" * 32)
+    assert otp.verificar_codigo(id_v, _codigo(enviados), db_path=copia) is None
+
+
+@pytest.mark.parametrize("secreto", ["", "corto"])
+def test_sin_secreto_no_se_envia_ni_registra_nada(db, monkeypatch, secreto):
+    copia, enviados, ruc = db
+    monkeypatch.setattr(config, "AUTH_SECRET", secreto)
+    with sqlite3.connect(copia) as con:
+        antes = con.execute("SELECT COUNT(*) FROM verificacion").fetchone()[0]
+    with pytest.raises(RuntimeError, match="AUTH_SECRET"):
+        otp.solicitar_codigo(ruc, db_path=copia)
+    assert enviados == []
+    with sqlite3.connect(copia) as con:
+        assert con.execute("SELECT COUNT(*) FROM verificacion").fetchone()[0] == antes
 
 
 def test_bloqueo_tras_intentos_fallidos(db):

@@ -29,7 +29,8 @@ pip install -r requirements.txt
 ## Generar la base de datos
 
 `anticipa.db` no se versiona (está en `.gitignore`): se genera de forma
-reproducible desde `db/schema.sql` con datos fijos.
+reproducible desde `db/schema.sql` con datos fijos. Antes define `AUTH_SECRET`
+en `.env` (ver `.env.example`): los códigos OTP de prueba se guardan con ese HMAC.
 
 ```bash
 python -X utf8 db/generar_datos.py
@@ -75,7 +76,8 @@ pytest -q
 registrado del cliente (vence en 10 min, se espera 60 s entre envíos) y
 devuelve `(id_verificacion, correo_enmascarado)`; `verificar_codigo(id, codigo)`
 devuelve el `cliente_id` o `None` (3 intentos fallidos = bloqueado). Solo se
-guarda el hash del código en `verificacion`.
+guarda HMAC-SHA256(`AUTH_SECRET`, código) en `verificacion`; sin `AUTH_SECRET`
+(mínimo 32 caracteres) no se envían códigos (503). Cambiarlo invalida los pendientes.
 
 Por HTTP (`app/auth/rutas.py`):
 
@@ -90,7 +92,7 @@ Aún no se emite token de sesión tras verificar.
 
 Prueba en vivo:
 
-1. En `.env`: `SMTP_*` (con Gmail, una
+1. En `.env`: `AUTH_SECRET`, `SMTP_*` (con Gmail, una
    [contraseña de aplicación](https://myaccount.google.com/apppasswords)) y tu correo
    en tu slot `CORREO_PRUEBA_1`..`CORREO_PRUEBA_5`. Clientes por slot: 1 → 1, 6, 11;
    2 → 2, 7, 12; 3 → 3, 8, 13; 4 → 4, 9; 5 → 5, 10.

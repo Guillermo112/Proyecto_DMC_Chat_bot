@@ -2,7 +2,8 @@
 
 Flujo: `solicitar_codigo(ruc)` -> (id de verificación, correo enmascarado);
 `verificar_codigo(id, codigo)` -> `cliente_id` verificado o None.
-En la base solo se guarda el hash SHA-256 del código (igual que los datos de prueba).
+En la base solo se guarda HMAC-SHA256(AUTH_SECRET, código): sin el secreto, un
+volcado de la tabla no permite recuperar los códigos probando el millón de opciones.
 """
 import hashlib
 import hmac
@@ -14,13 +15,19 @@ from email.message import EmailMessage
 from pathlib import Path
 
 from app import config
+from app.auth.secreto import obtener_secreto
 from app.data.conexion import get_connection
 
 _FORMATO = "%Y-%m-%d %H:%M:%S"
 
 
-def _hash(codigo: str) -> str:
-    return hashlib.sha256(codigo.encode()).hexdigest()
+def hash_codigo(codigo: str) -> str:
+    """HMAC-SHA256 del código con AUTH_SECRET (hex, 64 caracteres).
+
+    También lo usa db/generar_datos.py para los datos de prueba. Cambiar el secreto
+    invalida los códigos pendientes (dejan de coincidir).
+    """
+    return hmac.new(obtener_secreto(), codigo.encode(), hashlib.sha256).hexdigest()
 
 
 def enviar_correo(destino: str, asunto: str, cuerpo: str) -> None:
@@ -94,7 +101,7 @@ def solicitar_codigo(ruc: str, db_path: Path | None = None) -> tuple[int, str | 
             cur = con.execute(
                 "INSERT INTO verificacion (id_cliente, ruc_ingresado, codigo_hash, fecha_envio,"
                 " fecha_expira, intentos, estado) VALUES (?, ?, ?, ?, ?, 0, 'pendiente')",
-                (id_cliente, ruc, _hash(codigo), ahora.strftime(_FORMATO), expira.strftime(_FORMATO)),
+                (id_cliente, ruc, hash_codigo(codigo), ahora.strftime(_FORMATO), expira.strftime(_FORMATO)),
             )
             enviar_correo(
                 cliente["correo_facturacion"],
@@ -126,7 +133,7 @@ def verificar_codigo(id_verificacion: int, codigo: str, db_path: Path | None = N
                 return None
 
             intentos = fila["intentos"] + 1
-            if hmac.compare_digest(_hash(codigo), fila["codigo_hash"]):
+            if hmac.compare_digest(hash_codigo(codigo), fila["codigo_hash"]):
                 con.execute(
                     "UPDATE verificacion SET intentos = ?, estado = 'verificado' WHERE id_verificacion = ?",
                     (intentos, id_verificacion),
