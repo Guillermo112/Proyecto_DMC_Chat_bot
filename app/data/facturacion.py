@@ -5,25 +5,47 @@ Reglas:
   fragmentos SQL fijos, nunca valores concatenados.
 - Toda función recibe `cliente_id` y lo aplica en el WHERE.
 """
+import re
 from datetime import date
 from pathlib import Path
 
 from app import config
 from app.data.conexion import get_connection
 from app.schemas import (
+    AnomaliasCliente,
+    AveriaSlaIncumplido,
     Cliente,
+    CobroObservado,
+    CobroTarifa,
+    ComparacionPeriodos,
+    ExcesoSinSustento,
     FacturaDetalle,
+    FacturaDuplicada,
     FacturaResumen,
+    LineaComparada,
     LineaFactura,
+    LineaPeriodo,
+    ListaServicios,
+    ListaSolicitudes,
     NotaCreditoAplicada,
     PaginaFacturas,
+    PeriodoComparado,
     ResumenFacturacion,
     ResumenPeriodo,
     SaldoPendiente,
+    Servicio,
+    ServicioBajaFacturado,
+    Solicitud,
+    TarifaDistinta,
 )
 
 ESTADOS_FACTURA = {"emitida", "pagada", "vencida", "en_disputa", "anulada"}
 ESTADOS_PENDIENTES = ("emitida", "vencida", "en_disputa")
+ESTADOS_SERVICIO = {"activo", "baja"}
+ESTADOS_SOLICITUD = {"abierta", "en_proceso", "cerrada"}
+# Mismo umbral que la vista v_variacion_facturacion (db/schema.sql).
+UMBRAL_VARIACION_PCT = 25.0
+_PATRON_PERIODO = re.compile(r"[0-9]{4}-(0[1-9]|1[0-2])")  # [0-9], no \d: \d acepta dígitos Unicode
 
 _COLUMNAS_FACTURA = """
     f.id_factura, f.numero, f.periodo, f.fecha_emision, f.fecha_vencimiento,
@@ -45,6 +67,13 @@ def _fecha_iso(valor: date | None) -> str | None:
     return valor.isoformat()
 
 
+def _validar_periodo(periodo: str) -> str:
+    """Periodo facturado en formato AAAA-MM (mes 01 a 12)."""
+    if not isinstance(periodo, str) or not _PATRON_PERIODO.fullmatch(periodo.strip()):
+        raise ValueError("periodo debe tener el formato AAAA-MM, p. ej. '2026-10'")
+    return periodo.strip()
+
+
 def _fecha_actual(con) -> str:
     """Fecha de sistema ficticia guardada en la tabla parametro."""
     fila = con.execute("SELECT valor FROM parametro WHERE clave = ?", ("fecha_actual",)).fetchone()
@@ -53,6 +82,37 @@ def _fecha_actual(con) -> str:
 
 def _factura(fila) -> FacturaResumen:
     return FacturaResumen(**{k: fila[k] for k in FacturaResumen.model_fields})
+
+
+def _facturas_vigentes(con, cliente_id: int, periodos) -> dict[str, list[FacturaResumen]]:
+    """Facturas no anuladas del cliente en esos periodos, agrupadas por periodo.
+
+    Un periodo con más de una es un posible duplicado (CS-01): quien llame no
+    debe sumarlas ni elegir una (regla en docs/capa_datos.md, sección 4).
+    """
+    periodos = list(dict.fromkeys(periodos))  # sin repetidos, en orden
+    if not periodos:
+        return {}
+    marcadores = ", ".join("?" for _ in periodos)  # solo marcadores fijos
+    filas = con.execute(
+        f"SELECT {_COLUMNAS_FACTURA} FROM factura f "
+        f"WHERE f.id_cliente = ? AND f.estado <> 'anulada' AND f.periodo IN ({marcadores}) "
+        "ORDER BY f.periodo, f.id_factura",
+        [cliente_id, *periodos],
+    ).fetchall()
+    resultado: dict[str, list[FacturaResumen]] = {p: [] for p in periodos}
+    for fila in filas:
+        resultado[fila["periodo"]].append(_factura(fila))
+    return resultado
+
+
+def _periodos_multiples(con, cliente_id: int, periodos) -> list[str]:
+    """Periodos (de los dados) con más de una factura vigente, ordenados."""
+    return sorted(p for p, fs in _facturas_vigentes(con, cliente_id, periodos).items() if len(fs) > 1)
+
+
+def _suma(valores) -> float:
+    return round(sum(valores), 2)
 
 
 def obtener_cliente(cliente_id: int, db_path: Path | None = None) -> Cliente | None:
@@ -78,9 +138,17 @@ def listar_facturas(
     limite: int | None = None,
     offset: int = 0,
     db_path: Path | None = None,
+    *,
+    periodo: str | None = None,
 ) -> PaginaFacturas:
-    """Facturas del cliente filtradas por fecha de emisión y estado, paginadas."""
+    """Facturas del cliente filtradas por periodo, fecha de emisión y estado, paginadas.
+
+    `periodo` (AAAA-MM) es el mes facturado, no el de emisión: la factura de
+    2026-09 se emite el 2026-10-01. Se combina con los demás filtros (AND).
+    """
     _validar_cliente_id(cliente_id)
+    if periodo is not None:
+        periodo = _validar_periodo(periodo)
     if estado is not None and estado not in ESTADOS_FACTURA:
         raise ValueError(f"Estado inválido. Permitidos: {sorted(ESTADOS_FACTURA)}")
     limite = config.LIMITE_POR_DEFECTO if limite is None else limite
@@ -89,6 +157,9 @@ def listar_facturas(
 
     condiciones = ["f.id_cliente = ?"]
     params: list = [cliente_id]
+    if periodo is not None:
+        condiciones.append("f.periodo = ?")
+        params.append(periodo)
     if fecha_desde is not None:
         condiciones.append("f.fecha_emision >= ?")
         params.append(_fecha_iso(fecha_desde))
@@ -140,7 +211,8 @@ def saldo_pendiente(cliente_id: int, db_path: Path | None = None) -> SaldoPendie
     """Suma de facturas emitidas, vencidas o en disputa del cliente.
 
     No resta notas de crédito (la base no las refleja en la factura); se
-    listan aparte las aplicadas sobre esas facturas.
+    listan aparte las aplicadas sobre esas facturas. Una suma que incluiría
+    una factura de un periodo con varias vigentes es None (ver SaldoPendiente).
     """
     _validar_cliente_id(cliente_id)
     marcadores = ",".join("?" for _ in ESTADOS_PENDIENTES)
@@ -163,16 +235,24 @@ def saldo_pendiente(cliente_id: int, db_path: Path | None = None) -> SaldoPendie
             """,
             (cliente_id, *ESTADOS_PENDIENTES),
         ).fetchall()
+        facturas = [_factura(f) for f in filas]
+        # Cuenta todas las vigentes del periodo (también pagadas), no solo las pendientes.
+        multiples = _periodos_multiples(con, cliente_id, [f.periodo for f in facturas])
 
-    facturas = [_factura(f) for f in filas]
+    def suma_si_es_segura(grupo: list[FacturaResumen]) -> float | None:
+        if any(f.periodo in multiples for f in grupo):
+            return None
+        return _suma(f.total for f in grupo)
+
     vencidas = [f for f in facturas if f.estado == "vencida" or f.fecha_vencimiento < fecha_corte]
     return SaldoPendiente(
         fecha_corte=fecha_corte,
-        saldo_total=round(sum(f.total for f in facturas), 2),
-        saldo_vencido=round(sum(f.total for f in vencidas), 2),
+        saldo_total=suma_si_es_segura(facturas),
+        saldo_vencido=suma_si_es_segura(vencidas),
         cantidad_facturas=len(facturas),
         facturas=facturas,
         notas_credito_aplicadas=[NotaCreditoAplicada(**dict(n)) for n in notas],
+        periodos_multiples=multiples,
     )
 
 
@@ -202,14 +282,383 @@ def resumen_facturacion(
             """,
             (cliente_id, desde, hasta),
         ).fetchall()
+        # Cuenta todas las vigentes del periodo, aunque alguna se emitiera fuera del rango.
+        multiples = _periodos_multiples(con, cliente_id, [f["periodo"] for f in filas])
 
-    periodos = [ResumenPeriodo(**dict(f)) for f in filas]
+    periodos = []
+    for f in filas:
+        es_multiple = f["periodo"] in multiples
+        periodos.append(ResumenPeriodo(
+            periodo=f["periodo"],
+            cantidad_facturas=f["cantidad_facturas"],
+            facturas_multiples=es_multiple,
+            **{k: None if es_multiple else f[k] for k in ("subtotal", "igv", "total")},
+        ))
+    hay_multiples = bool(multiples)
     return ResumenFacturacion(
         fecha_desde=desde,
         fecha_hasta=hasta,
         periodos=periodos,
         cantidad_facturas=sum(p.cantidad_facturas for p in periodos),
-        subtotal=round(sum(p.subtotal for p in periodos), 2),
-        igv=round(sum(p.igv for p in periodos), 2),
-        total=round(sum(p.total for p in periodos), 2),
+        **{k: None if hay_multiples else _suma(getattr(p, k) for p in periodos)
+           for k in ("subtotal", "igv", "total")},
+        periodos_multiples=multiples,
+    )
+
+
+# ------------------------------------------------- servicios contratados
+
+def _servicios(con, cliente_id: int, estado: str | None = None) -> list[Servicio]:
+    """Servicios del cliente con los datos de su producto (sin la tarifa de lista)."""
+    condiciones, params = ["s.id_cliente = ?"], [cliente_id]
+    if estado is not None:
+        condiciones.append("s.estado = ?")
+        params.append(estado)
+    filas = con.execute(
+        f"""
+        SELECT s.id_servicio, s.codigo_producto, p.nombre AS producto, p.unidad, s.sede,
+               s.cantidad, s.tarifa_pactada, s.sla_pactado, p.gb_incluidos_por_linea,
+               p.precio_gb_exceso, s.fecha_activacion, s.fecha_baja, s.estado
+        FROM servicio_contratado s
+        JOIN producto p ON p.codigo = s.codigo_producto
+        WHERE {" AND ".join(condiciones)}
+        ORDER BY s.id_servicio
+        """,
+        params,
+    ).fetchall()
+    return [Servicio(**dict(f)) for f in filas]
+
+
+def obtener_servicios(
+    cliente_id: int, estado: str | None = None, db_path: Path | None = None
+) -> ListaServicios:
+    """Servicios contratados del cliente: tarifa pactada, SLA, alta y baja.
+
+    Por defecto incluye los dados de baja, que CS-02 necesita (fecha de baja).
+    `estado` filtra por `activo` o `baja`.
+    """
+    _validar_cliente_id(cliente_id)
+    if estado is not None and estado not in ESTADOS_SERVICIO:
+        raise ValueError(f"Estado de servicio inválido. Permitidos: {sorted(ESTADOS_SERVICIO)}")
+    with get_connection(db_path) as con:
+        return ListaServicios(fecha_corte=_fecha_actual(con), servicios=_servicios(con, cliente_id, estado))
+
+
+# ------------------------------------------------- comparación entre periodos
+
+def _periodo_anterior(periodo: str) -> str:
+    anio, mes = int(periodo[:4]), int(periodo[5:])
+    return f"{anio - 1}-12" if mes == 1 else f"{anio}-{mes - 1:02d}"
+
+
+def _lineas_con_servicio(con, cliente_id: int, id_factura: int, servicios: dict[int, Servicio]) -> dict:
+    """Líneas de una factura del cliente, indexadas por (servicio, clase de cargo).
+
+    `servicios` son los del mismo cliente (`_servicios`): una línea cuyo servicio
+    no esté ahí queda sin servicio, nunca con el de otro cliente.
+    """
+    filas = con.execute(
+        """
+        SELECT l.id_linea, l.id_servicio, l.tipo, l.concepto, l.cantidad, l.precio_unitario, l.monto
+        FROM factura_linea l
+        JOIN factura f ON f.id_factura = l.id_factura
+        WHERE l.id_factura = ? AND f.id_cliente = ?
+        ORDER BY l.id_linea
+        """,
+        (id_factura, cliente_id),
+    ).fetchall()
+    lineas: dict = {}
+    for f in filas:
+        # cargo_mensual y prorrateo son la misma clase: el prorrateo pasa a mes completo.
+        clase = "cargo" if f["tipo"] in ("cargo_mensual", "prorrateo") else f["tipo"]
+        clave = (f["id_servicio"], clase)
+        if f["id_servicio"] is None or clave in lineas:  # sin servicio o repetida: no se empareja a ciegas
+            clave = (f["id_servicio"], clase, f["concepto"], f["id_linea"])
+        linea = LineaPeriodo(**{k: f[k] for k in LineaPeriodo.model_fields})
+        lineas[clave] = (linea, servicios.get(f["id_servicio"]))
+    return lineas
+
+
+def _campos_cambiados(antes: LineaPeriodo, despues: LineaPeriodo) -> list[str]:
+    campos = ["tipo"] if antes.tipo != despues.tipo else []
+    campos += [c for c in ("cantidad", "precio_unitario", "monto")
+               if abs(getattr(antes, c) - getattr(despues, c)) > 0.005]
+    return campos
+
+
+def _diferencias(antes: dict, despues: dict) -> tuple[list[LineaComparada], int]:
+    """Líneas nuevas, eliminadas o cambiadas, y cuántas quedaron igual."""
+    cambiadas: list[LineaComparada] = []
+    sin_cambio = 0
+    for clave in [*antes, *(k for k in despues if k not in antes)]:
+        la, sa = antes.get(clave, (None, None))
+        ld, sd = despues.get(clave, (None, None))
+        if la is None or ld is None:
+            cambio, campos = ("nueva" if la is None else "eliminada"), []
+        else:
+            campos = _campos_cambiados(la, ld)
+            if not campos:
+                sin_cambio += 1
+                continue
+            cambio = "cambiada"
+        cambiadas.append(LineaComparada(
+            cambio=cambio, servicio=sd or sa, antes=la, despues=ld, campos_cambiados=campos,
+            diferencia_monto=round((ld.monto if ld else 0) - (la.monto if la else 0), 2),
+        ))
+    return cambiadas, sin_cambio
+
+
+def comparar_periodos(
+    cliente_id: int,
+    periodo_b: str,
+    periodo_a: str | None = None,
+    db_path: Path | None = None,
+) -> ComparacionPeriodos:
+    """Qué cambió entre dos periodos facturados del cliente (CS-09).
+
+    `periodo_a` es el anterior; si falta, se usa el mes previo a `periodo_b`.
+    Compara subtotales (sin IGV) y líneas, emparejadas por servicio. Excluye
+    facturas anuladas. Si un periodo no tiene facturas o tiene más de una
+    vigente, no compara: `comparable=False` y `motivo` (ver ComparacionPeriodos).
+    """
+    _validar_cliente_id(cliente_id)
+    periodo_b = _validar_periodo(periodo_b)
+    periodo_a = _periodo_anterior(periodo_b) if periodo_a is None else _validar_periodo(periodo_a)
+    if periodo_a >= periodo_b:
+        raise ValueError("periodo_a debe ser anterior a periodo_b")
+
+    with get_connection(db_path) as con:
+        facturas = _facturas_vigentes(con, cliente_id, [periodo_a, periodo_b])
+
+        def resumen(periodo: str) -> PeriodoComparado:
+            fs = facturas[periodo]
+            unica = fs[0] if len(fs) == 1 else None
+            return PeriodoComparado(
+                periodo=periodo, facturas=fs,
+                subtotal=unica.subtotal if unica else None,
+                igv=unica.igv if unica else None,
+                total=unica.total if unica else None,
+            )
+
+        a, b = resumen(periodo_a), resumen(periodo_b)
+        cantidades = (len(a.facturas), len(b.facturas))
+        if max(cantidades) > 1:
+            motivo = "facturas_multiples"
+        elif min(cantidades) == 0:
+            motivo = "periodo_sin_facturas"
+        else:
+            motivo = None
+        base = dict(periodo_a=a, periodo_b=b, umbral_variacion_pct=UMBRAL_VARIACION_PCT)
+        if motivo is not None:
+            return ComparacionPeriodos(
+                **base, comparable=False, motivo=motivo, variacion_subtotal=None, variacion_pct=None,
+                variacion_fuerte=None, lineas=None, lineas_sin_cambio=None,
+            )
+
+        servicios = {s.id_servicio: s for s in _servicios(con, cliente_id)}
+        lineas, sin_cambio = _diferencias(
+            _lineas_con_servicio(con, cliente_id, a.facturas[0].id_factura, servicios),
+            _lineas_con_servicio(con, cliente_id, b.facturas[0].id_factura, servicios),
+        )
+
+    variacion = round(b.subtotal - a.subtotal, 2)
+    pct = round(variacion / a.subtotal * 100, 2) if a.subtotal else None
+    return ComparacionPeriodos(
+        **base, comparable=True, motivo=None, variacion_subtotal=variacion, variacion_pct=pct,
+        variacion_fuerte=None if pct is None else abs(pct) > UMBRAL_VARIACION_PCT,
+        lineas=lineas, lineas_sin_cambio=sin_cambio,
+    )
+
+
+# ------------------------------------------------- anomalías detectadas
+
+def _agrupar_por_servicio(filas) -> dict[int, list]:
+    grupos: dict[int, list] = {}
+    for fila in filas:
+        grupos.setdefault(fila["id_servicio"], []).append(fila)
+    return grupos
+
+
+def _duplicadas(con, cliente_id: int) -> list[FacturaDuplicada]:
+    filas = con.execute(
+        "SELECT periodo, subtotal, n_facturas FROM v_facturas_duplicadas WHERE id_cliente = ? ORDER BY periodo",
+        (cliente_id,),
+    ).fetchall()
+    vigentes = _facturas_vigentes(con, cliente_id, [f["periodo"] for f in filas])
+    resultado = []
+    for f in filas:
+        iguales = [x for x in vigentes[f["periodo"]] if abs(x.subtotal - f["subtotal"]) < 0.005]
+        resultado.append(FacturaDuplicada(
+            periodo=f["periodo"], facturas=iguales,
+            monto_observado=round(f["subtotal"] * (f["n_facturas"] - 1), 2),
+        ))
+    return resultado
+
+
+def _bajas_facturadas(con, cliente_id: int, servicios: dict[int, Servicio]) -> list[ServicioBajaFacturado]:
+    filas = con.execute(
+        """
+        SELECT v.id_servicio, v.periodo, f.numero, v.monto_a_acreditar AS monto
+        FROM v_servicios_baja_facturados v
+        JOIN factura f ON f.id_factura = v.id_factura AND f.id_cliente = v.id_cliente
+        WHERE v.id_cliente = ?
+        ORDER BY v.id_servicio, v.periodo
+        """,
+        (cliente_id,),
+    ).fetchall()
+    resultado = []
+    for id_servicio, grupo in _agrupar_por_servicio(filas).items():
+        cobros = [CobroObservado(periodo=g["periodo"], numero_factura=g["numero"], monto_observado=round(g["monto"], 2))
+                  for g in grupo]
+        resultado.append(ServicioBajaFacturado(
+            servicio=servicios[id_servicio], cobros=cobros,
+            monto_observado=_suma(c.monto_observado for c in cobros),
+        ))
+    return resultado
+
+
+def _tarifas_distintas(con, cliente_id: int, servicios: dict[int, Servicio]) -> list[TarifaDistinta]:
+    filas = con.execute(
+        """
+        SELECT v.id_servicio, v.periodo, f.numero, v.tarifa_pactada, v.tarifa_facturada, v.cantidad, v.diferencia
+        FROM v_tarifa_distinta v
+        JOIN factura f ON f.id_factura = v.id_factura AND f.id_cliente = v.id_cliente
+        WHERE v.id_cliente = ?
+        ORDER BY v.id_servicio, v.periodo
+        """,
+        (cliente_id,),
+    ).fetchall()
+    resultado = []
+    for id_servicio, grupo in _agrupar_por_servicio(filas).items():
+        cobros = [CobroTarifa(periodo=g["periodo"], numero_factura=g["numero"], monto_observado=g["diferencia"],
+                              tarifa_facturada=g["tarifa_facturada"], cantidad=g["cantidad"]) for g in grupo]
+        resultado.append(TarifaDistinta(
+            servicio=servicios[id_servicio], tarifa_pactada=grupo[0]["tarifa_pactada"], cobros=cobros,
+            monto_observado=_suma(c.monto_observado for c in cobros),
+        ))
+    return resultado
+
+
+def _excesos_sin_sustento(con, cliente_id: int, servicios: dict[int, Servicio]) -> list[ExcesoSinSustento]:
+    filas = con.execute(
+        """
+        SELECT v.id_servicio, v.periodo, f.numero, v.gb_facturados, v.monto_a_acreditar AS monto,
+               l.precio_unitario AS precio_gb,
+               c.gb_incluidos, c.gb_usados, c.exceso_gb
+        FROM v_exceso_sin_sustento v
+        JOIN factura f ON f.id_factura = v.id_factura AND f.id_cliente = v.id_cliente
+        JOIN factura_linea l ON l.id_factura = v.id_factura AND l.id_servicio = v.id_servicio AND l.tipo = 'exceso'
+        LEFT JOIN consumo c ON c.id_servicio = v.id_servicio AND c.periodo = v.periodo
+        WHERE v.id_cliente = ?
+        ORDER BY v.periodo, v.id_servicio
+        """,
+        (cliente_id,),
+    ).fetchall()
+    return [
+        ExcesoSinSustento(
+            servicio=servicios[f["id_servicio"]], periodo=f["periodo"], numero_factura=f["numero"],
+            gb_facturados=f["gb_facturados"], precio_gb=f["precio_gb"],
+            gb_incluidos_registrados=f["gb_incluidos"], gb_usados_registrados=f["gb_usados"],
+            gb_exceso_registrados=f["exceso_gb"], monto_observado=round(f["monto"], 2),
+        )
+        for f in filas
+    ]
+
+
+def _averias_sla(con, cliente_id: int, servicios: dict[int, Servicio]) -> list[AveriaSlaIncumplido]:
+    # Sin a.causa: el PDF prohíbe comunicar causas técnicas (CS-05).
+    filas = con.execute(
+        """
+        SELECT v.id_averia, v.id_servicio, v.periodo, a.fecha_inicio, a.fecha_fin, v.unidades_afectadas,
+               v.horas_caida, v.tolerancia_h, v.horas_fuera, v.descuento_sin_igv
+        FROM v_averias_sin_compensar v
+        JOIN averia a ON a.id_averia = v.id_averia
+        WHERE v.id_cliente = ?
+        ORDER BY a.fecha_inicio
+        """,
+        (cliente_id,),
+    ).fetchall()
+    return [
+        AveriaSlaIncumplido(
+            servicio=servicios[f["id_servicio"]], id_averia=f["id_averia"], periodo=f["periodo"],
+            fecha_inicio=f["fecha_inicio"], fecha_fin=f["fecha_fin"],
+            unidades_afectadas=f["unidades_afectadas"], horas_caida=f["horas_caida"],
+            tolerancia_horas=f["tolerancia_h"], horas_fuera_de_sla=f["horas_fuera"],
+            monto_observado=f["descuento_sin_igv"],
+        )
+        for f in filas
+    ]
+
+
+def detectar_anomalias(cliente_id: int, db_path: Path | None = None) -> AnomaliasCliente:
+    """Anomalías de facturación y SLA del cliente (CS-01 a CS-05 y CS-07).
+
+    Usa las vistas de detección de `db/schema.sql`, siempre filtradas por
+    `cliente_id`. Los cobros de un mismo servicio se agrupan con su total, para
+    que nadie tenga que sumar periodos a mano. Los montos son sin IGV y son lo
+    observado, no una devolución ni un ajuste aprobado.
+    """
+    _validar_cliente_id(cliente_id)
+    with get_connection(db_path) as con:
+        servicios = {s.id_servicio: s for s in _servicios(con, cliente_id)}
+        grupos = dict(
+            facturas_duplicadas=_duplicadas(con, cliente_id),
+            servicios_baja_facturados=_bajas_facturadas(con, cliente_id, servicios),
+            tarifas_distintas=_tarifas_distintas(con, cliente_id, servicios),
+            excesos_sin_sustento=_excesos_sin_sustento(con, cliente_id, servicios),
+            averias_sla_incumplido=_averias_sla(con, cliente_id, servicios),
+        )
+        fecha_corte = _fecha_actual(con)
+    return AnomaliasCliente(fecha_corte=fecha_corte, cantidad=sum(len(g) for g in grupos.values()), **grupos)
+
+
+# ------------------------------------------------- solicitudes
+
+def consultar_solicitudes(
+    cliente_id: int, estado: str | None = None, db_path: Path | None = None
+) -> ListaSolicitudes:
+    """Solicitudes del cliente con días transcurridos y si están fuera de plazo (CS-06).
+
+    Los días se cuentan como en `v_solicitudes_vencidas`: desde `fecha_registro`
+    hasta la fecha de corte ficticia (`parametro.fecha_actual`), o hasta
+    `fecha_cierre` si está cerrada. El plazo es el del cliente.
+    """
+    _validar_cliente_id(cliente_id)
+    if estado is not None and estado not in ESTADOS_SOLICITUD:
+        raise ValueError(f"Estado de solicitud inválido. Permitidos: {sorted(ESTADOS_SOLICITUD)}")
+    condiciones, params = ["so.id_cliente = ?"], [cliente_id]
+    if estado is not None:
+        condiciones.append("so.estado = ?")
+        params.append(estado)
+    with get_connection(db_path) as con:
+        fecha_corte = _fecha_actual(con)
+        fila_plazo = con.execute(
+            "SELECT plazo_atencion_dias FROM cliente WHERE id_cliente = ?", (cliente_id,)
+        ).fetchone()
+        filas = con.execute(
+            f"""
+            SELECT so.id_solicitud, so.tipo, so.descripcion, so.estado, so.fecha_registro, so.fecha_cierre,
+                   CAST(julianday(CASE WHEN so.estado = 'cerrada' THEN so.fecha_cierre ELSE ? END)
+                        - julianday(so.fecha_registro) AS INTEGER) AS dias_transcurridos,
+                   p.nombre AS responsable_nombre
+            FROM solicitud so
+            LEFT JOIN personal p ON p.id_personal = so.id_responsable
+            WHERE {" AND ".join(condiciones)}
+            ORDER BY so.fecha_registro DESC, so.id_solicitud DESC
+            """,
+            [fecha_corte, *params],
+        ).fetchall()
+        if fila_plazo is None:  # cliente inexistente: sin solicitudes, plazo general
+            fila_plazo = con.execute(
+                "SELECT CAST(valor AS INTEGER) AS plazo_atencion_dias FROM parametro WHERE clave = ?",
+                ("plazo_atencion_dias",),
+            ).fetchone()
+    plazo = fila_plazo["plazo_atencion_dias"]
+    solicitudes = [
+        Solicitud(**dict(f), fuera_de_plazo=f["estado"] != "cerrada" and f["dias_transcurridos"] > plazo)
+        for f in filas
+    ]
+    return ListaSolicitudes(
+        fecha_corte=fecha_corte, plazo_atencion_dias=plazo,
+        cantidad_fuera_de_plazo=sum(s.fuera_de_plazo for s in solicitudes), solicitudes=solicitudes,
     )

@@ -116,10 +116,17 @@ pueden pedir datos de otro cliente (`app/api/cliente.py`, sobre `app/data/factur
 | Ruta | Devuelve |
 |---|---|
 | `GET /mi/perfil` | Datos del cliente y su ejecutivo |
-| `GET /mi/facturas?fecha_desde&fecha_hasta&estado&limite&offset` | Facturas propias paginadas |
+| `GET /mi/facturas?periodo&fecha_desde&fecha_hasta&estado&limite&offset` | Facturas propias paginadas; `periodo` (AAAA-MM) es el mes facturado |
 | `GET /mi/facturas/{numero}` | Cabecera y líneas; 404 si no existe **o es de otro cliente** |
 | `GET /mi/saldo` | Saldo pendiente y notas de crédito aplicadas |
 | `GET /mi/resumen?fecha_desde&fecha_hasta` | Totales por periodo (excluye anuladas) |
+| `GET /mi/solicitudes?estado` | Solicitudes con días transcurridos y si están fuera de plazo (CS-06) |
+| `GET /mi/anomalias` | Anomalías detectadas (CS-01 a CS-05, CS-07) con su monto observado sin IGV |
+| `GET /mi/servicios?estado` | Servicios contratados (incluye los dados de baja): tarifa pactada, SLA, alta y baja |
+| `GET /mi/comparar?periodo_b&periodo_a` | Qué cambió entre dos periodos (por defecto, frente al mes anterior); con facturas duplicadas responde un aviso sin comparar |
+
+Qué ruta usar según lo que pide el cliente (casuísticas CS-01 a CS-13 del PDF):
+[`docs/casuisticas_api.md`](docs/casuisticas_api.md).
 
 Las rutas `/api/...` son el CRUD de desarrollo para Postman: no usan token y
 **solo se montan con `ENTORNO=dev`**. Con cualquier otro valor, o sin definirlo,

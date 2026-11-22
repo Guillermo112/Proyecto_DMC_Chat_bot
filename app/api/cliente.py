@@ -17,8 +17,18 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
 from app.auth.sesion import cliente_actual
 from app.data import facturacion
-from app.schemas import Cliente, FacturaDetalle, PaginaFacturas, ResumenFacturacion, SaldoPendiente
-from app.schemas.facturacion import EstadoFactura
+from app.schemas import (
+    AnomaliasCliente,
+    Cliente,
+    ComparacionPeriodos,
+    FacturaDetalle,
+    ListaServicios,
+    ListaSolicitudes,
+    PaginaFacturas,
+    ResumenFacturacion,
+    SaldoPendiente,
+)
+from app.schemas.facturacion import EstadoFactura, EstadoServicio, EstadoSolicitud
 
 router = APIRouter(
     prefix="/mi",
@@ -27,6 +37,9 @@ router = APIRouter(
     dependencies=[Depends(cliente_actual)],
     responses={401: {"description": "Falta el token de sesión, es inválido o expiró"}},
 )
+
+
+PATRON_PERIODO = r"^[0-9]{4}-(0[1-9]|1[0-2])$"  # AAAA-MM; [0-9] y no \d (dígitos Unicode)
 
 
 def _400(func, *args, **kwargs):
@@ -49,6 +62,11 @@ def mi_perfil(cliente_id: int = Depends(cliente_actual)):
 @router.get("/facturas", response_model=PaginaFacturas)
 def mis_facturas(
     cliente_id: int = Depends(cliente_actual),
+    periodo: str | None = Query(
+        None,
+        pattern=PATRON_PERIODO,
+        description="Mes facturado (AAAA-MM). La factura de 2026-09 se emite el 2026-10-01",
+    ),
     fecha_desde: date | None = Query(None, description="Emisión desde (AAAA-MM-DD)"),
     fecha_hasta: date | None = Query(None, description="Emisión hasta (AAAA-MM-DD)"),
     estado: EstadoFactura | None = None,
@@ -56,7 +74,9 @@ def mis_facturas(
     offset: int = Query(0, ge=0),
 ):
     """Facturas propias, de la más reciente a la más antigua, paginadas."""
-    return _400(facturacion.listar_facturas, cliente_id, fecha_desde, fecha_hasta, estado, limite, offset)
+    return _400(
+        facturacion.listar_facturas, cliente_id, fecha_desde, fecha_hasta, estado, limite, offset, periodo=periodo
+    )
 
 
 @router.get("/facturas/{numero}", response_model=FacturaDetalle, responses={404: {"description": "No existe o no es tuya"}})
@@ -85,3 +105,46 @@ def mi_resumen(
 ):
     """Totales por periodo entre dos fechas de emisión (excluye anuladas)."""
     return _400(facturacion.resumen_facturacion, cliente_id, fecha_desde, fecha_hasta)
+
+
+@router.get("/comparar", response_model=ComparacionPeriodos)
+def mi_comparacion(
+    periodo_b: str = Query(..., pattern=PATRON_PERIODO, description="Periodo a explicar (AAAA-MM)"),
+    periodo_a: str | None = Query(
+        None, pattern=PATRON_PERIODO, description="Periodo de referencia (AAAA-MM); por defecto, el mes anterior"
+    ),
+    cliente_id: int = Depends(cliente_actual),
+):
+    """Qué cambió entre dos periodos facturados: totales sin IGV y líneas nuevas, eliminadas o cambiadas.
+
+    Si un periodo no tiene facturas o tiene más de una vigente (posible duplicado),
+    responde `comparable: false` con el `motivo` y sin variación: no suma ni elige una.
+    """
+    return _400(facturacion.comparar_periodos, cliente_id, periodo_b, periodo_a)
+
+
+@router.get("/servicios", response_model=ListaServicios)
+def mis_servicios(
+    estado: EstadoServicio | None = Query(None, description="activo o baja; por defecto, todos"),
+    cliente_id: int = Depends(cliente_actual),
+):
+    """Servicios contratados: tarifa pactada (sin IGV), SLA, fecha de alta y de baja."""
+    return _400(facturacion.obtener_servicios, cliente_id, estado)
+
+
+@router.get("/anomalias", response_model=AnomaliasCliente)
+def mis_anomalias(cliente_id: int = Depends(cliente_actual)):
+    """Anomalías detectadas: duplicados, bajas facturadas, tarifas distintas, excesos y SLA.
+
+    Montos sin IGV y observados: no son una devolución ni un ajuste aprobado.
+    """
+    return facturacion.detectar_anomalias(cliente_id)
+
+
+@router.get("/solicitudes", response_model=ListaSolicitudes)
+def mis_solicitudes(
+    estado: EstadoSolicitud | None = Query(None, description="abierta, en_proceso o cerrada; por defecto, todas"),
+    cliente_id: int = Depends(cliente_actual),
+):
+    """Solicitudes con días transcurridos y si están fuera del plazo de atención (CS-06)."""
+    return _400(facturacion.consultar_solicitudes, cliente_id, estado)
