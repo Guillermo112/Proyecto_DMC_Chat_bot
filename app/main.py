@@ -25,6 +25,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Query, Path as PathParam
 from fastapi.responses import JSONResponse
 from sqlite3 import IntegrityError, OperationalError, DatabaseError
 
+from app.api.cliente import router as cliente_router
 from app.auth.rutas import router as auth_router
 from app.data import get_connection
 from app.data.anticipa_crud_por_entidad import (
@@ -51,6 +52,9 @@ app = FastAPI(
 )
 
 app.include_router(auth_router)
+# API del cliente autenticado (cliente_id solo desde el token). El resto de /api/...
+# es CRUD de desarrollo.
+app.include_router(cliente_router)
 
 
 @app.get("/health", tags=["Sistema"])

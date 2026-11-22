@@ -8,7 +8,8 @@ LangChain usando las funciones de `app/data` como herramientas.
 
 ```
 app/
-  main.py      # FastAPI: /health, /auth y CRUD de desarrollo (/api/...)
+  main.py      # FastAPI: /health, /auth, /mi y CRUD de desarrollo (/api/...)
+  api/         # rutas del cliente autenticado (/mi/...)
   config.py    # settings desde variables de entorno
   data/        # acceso a SQLite (solo lectura, filtrado por cliente)
   schemas/     # modelos Pydantic
@@ -95,6 +96,23 @@ Por HTTP (`app/auth/rutas.py`):
 En el código, las rutas con datos de cliente toman el cliente de la sesión con
 `cliente_id: int = Depends(cliente_actual)` (`app/auth/sesion.py`), nunca de lo que
 escriba el usuario.
+
+### API del cliente autenticado (`/mi/...`)
+
+Todas exigen `Authorization: Bearer <access_token>` (401 si falta o venció). El
+cliente sale **solo** del token: ninguna ruta recibe `cliente_id`, así que no se
+pueden pedir datos de otro cliente (`app/api/cliente.py`, sobre `app/data/facturacion.py`).
+
+| Ruta | Devuelve |
+|---|---|
+| `GET /mi/perfil` | Datos del cliente y su ejecutivo |
+| `GET /mi/facturas?fecha_desde&fecha_hasta&estado&limite&offset` | Facturas propias paginadas |
+| `GET /mi/facturas/{numero}` | Cabecera y líneas; 404 si no existe **o es de otro cliente** |
+| `GET /mi/saldo` | Saldo pendiente y notas de crédito aplicadas |
+| `GET /mi/resumen?fecha_desde&fecha_hasta` | Totales por periodo (excluye anuladas) |
+
+Las rutas `/api/...` son el CRUD de desarrollo para Postman: no usan token y no
+deben exponerse fuera de localhost.
 
 La tabla `verificacion` no está en el CRUD de `/api/...`: solo se toca vía `/auth`.
 
