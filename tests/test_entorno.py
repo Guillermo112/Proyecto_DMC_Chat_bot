@@ -44,6 +44,7 @@ def test_dev_monta_el_crud(entorno):
     assert "/api/clientes/por-ruc/{ruc}" in rutas
     assert "/api/ajustes/{ajuste_id}/aprobar" in rutas
     assert "/api/{entidad}/buscar" in rutas
+    assert "/dev/rag/buscar" in rutas and "/dev/rag/info" in rutas
 
 
 @pytest.mark.parametrize("entorno", ["prod", "produccion", "development", ""])
@@ -51,6 +52,7 @@ def test_fuera_de_dev_no_hay_api(entorno):
     """Solo "dev" exacto lo monta; sin definir (vacío) cuenta como prod."""
     rutas = _rutas(entorno)
     assert _api(rutas) == []
+    assert [r for r in rutas if r.startswith("/dev")] == []
     # Lo público sigue disponible.
     for ruta in ("/health", "/auth/solicitar-codigo", "/auth/verificar-codigo", "/auth/sesion", "/mi/saldo"):
         assert ruta in rutas

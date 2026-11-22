@@ -1,7 +1,7 @@
 """Prueba en vivo del OTP por correo.
 
 Uso (desde la raíz):  python -X utf8 -m scripts.demo_otp
-Requiere SMTP_* en .env y, para recibirlo tú, CORREO_CLIENTE_DEMO + base regenerada.
+Requiere SMTP_* en .env y, para recibirlo tú, tu correo en CORREO_PRUEBA_n + regenerar_base.bat.
 """
 from app import config
 from app.auth import solicitar_codigo, verificar_codigo

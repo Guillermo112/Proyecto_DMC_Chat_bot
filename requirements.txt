@@ -13,7 +13,18 @@ uvicorn>=0.54,<0.55
 pydantic>=2.14,<3
 python-dotenv>=1.2,<2
 PyJWT>=2.15,<3
-
-# Tests (httpx lo usa TestClient)
-pytest>=9.2,<10
+# Cliente HTTP del router de modelos (app/llm); también lo usa TestClient
 httpx>=0.28,<0.29
+
+# RAG (app/rag)
+numpy>=2.5,<3
+scikit-learn>=1.9,<2
+pypdf>=7.1,<8
+# Embeddings locales. En Windows/Linux sin GPU, instalar antes torch solo CPU
+# (mucho más liviano):
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+torch>=2.15,<3
+sentence-transformers>=6.3,<7
+
+# Tests
+pytest>=9.2,<10

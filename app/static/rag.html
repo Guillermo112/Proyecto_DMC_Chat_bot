@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Banco de pruebas RAG · Anticipa</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --texto: #1d232b; --suave: #5f6b7a; --borde: #dde2e8;
+    --acento: #1f6feb; --ok: #1a7f37; --ok-bg: #e6f4ea; --no: #9a6700; --no-bg: #fff4d6;
+    --prompt: #6639ba; --prompt-bg: #f0e9ff; --barra: #c9d4e2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1419; --panel: #171d24; --texto: #e3e8ee; --suave: #95a1af; --borde: #2a333d;
+      --acento: #58a6ff; --ok: #56d364; --ok-bg: #12301c; --no: #e3b341; --no-bg: #3a2d0b;
+      --prompt: #bc8cff; --prompt-bg: #2a1d45; --barra: #33404e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--texto);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { padding: 16px 20px; border-bottom: 1px solid var(--borde); background: var(--panel); }
+  header h1 { margin: 0; font-size: 18px; }
+  header p { margin: 4px 0 0; color: var(--suave); font-size: 13px; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px;
+         padding: 16px 20px; max-width: 1280px; margin: 0 auto; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; padding: 12px 16px; } }
+  .panel { background: var(--panel); border: 1px solid var(--borde); border-radius: 10px; padding: 14px; }
+  form { display: flex; gap: 8px; }
+  input[type=text] { flex: 1; min-width: 0; padding: 10px 12px; font: inherit; color: inherit;
+         background: var(--bg); border: 1px solid var(--borde); border-radius: 8px; }
+  button { font: inherit; padding: 9px 14px; border-radius: 8px; border: 1px solid var(--acento);
+           background: var(--acento); color: #fff; cursor: pointer; }
+  button.sec { background: transparent; color: var(--acento); }
+  button:disabled { opacity: .5; cursor: wait; }
+  .controles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+  @media (max-width: 600px) { .controles { grid-template-columns: 1fr; } }
+  label { font-size: 13px; color: var(--suave); display: block; }
+  label b { color: var(--texto); font-variant-numeric: tabular-nums; }
+  input[type=range], select { width: 100%; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .chip { font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--borde);
+          background: var(--bg); color: var(--texto); cursor: pointer; }
+  .chip.ajena { border-style: dashed; }
+  .leyenda { flex-basis: 100%; font-size: 12px; color: var(--suave); }
+  .estado { margin: 12px 0 0; font-size: 13px; color: var(--suave); }
+  .resultado { border: 1px solid var(--borde); border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
+  .resultado.fuera { opacity: .55; }
+  .cab { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--suave); }
+  .score { font-weight: 600; color: var(--texto); font-variant-numeric: tabular-nums; min-width: 44px; }
+  .barra { flex: 0 0 90px; height: 6px; background: var(--borde); border-radius: 3px; position: relative; }
+  .barra i { position: absolute; inset: 0 auto 0 0; background: var(--barra); border-radius: 3px; }
+  .barra .corte { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--texto); }
+  .tag { padding: 1px 7px; border-radius: 999px; font-weight: 600; }
+  .tag.ok { color: var(--ok); background: var(--ok-bg); }
+  .tag.no { color: var(--no); background: var(--no-bg); }
+  .tag.prompt { color: var(--prompt); background: var(--prompt-bg); }
+  .texto { margin-top: 6px; white-space: pre-wrap; word-wrap: break-word; }
+  aside h2 { font-size: 14px; margin: 0 0 8px; }
+  aside dl { margin: 0; font-size: 13px; display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; }
+  aside dt { color: var(--suave); }
+  aside dd { margin: 0; word-break: break-word; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: left; padding: 4px 4px; border-bottom: 1px solid var(--borde); vertical-align: top; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .hueco { color: var(--suave); font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Banco de pruebas del RAG</h1>
+  <p>Qué recupera el índice para cada pregunta. Sin LLM: solo fragmentos, puntajes y umbral. Solo en ENTORNO=dev.</p>
+</header>
+<main>
+  <section>
+    <div class="panel">
+      <form id="form">
+        <input id="q" type="text" placeholder="Ej.: ¿qué es el prorrateo?" autocomplete="off" autofocus>
+        <button id="ir" type="submit">Buscar</button>
+      </form>
+      <div class="controles">
+        <div>
+          <label for="umbral">Umbral <b id="vUmbral">—</b></label>
+          <input id="umbral" type="range" min="0" max="1" step="0.01">
+        </div>
+        <div>
+          <label for="lam">MMR λ <b id="vLam">—</b> <span>(1 relevancia · 0 variedad)</span></label>
+          <input id="lam" type="range" min="0" max="1" step="0.05">
+        </div>
+        <div>
+          <label for="k">Fragmentos a mostrar</label>
+          <select id="k"><option>3</option><option>5</option><option selected>8</option><option>12</option></select>
+        </div>
+      </div>
+      <div class="chips" id="chips"></div>
+      <p class="estado" id="estado">Cargando el índice (la primera vez tarda unos segundos)…</p>
+    </div>
+    <div id="resultados"></div>
+  </section>
+  <aside>
+    <div class="panel">
+      <h2>Índice</h2>
+      <dl id="info"><dt>Estado</dt><dd>…</dd></dl>
+      <p style="margin:10px 0 0"><button class="sec" id="restaurar" type="button">Restaurar parámetros</button></p>
+    </div>
+    <div class="panel" style="margin-top:16px">
+      <h2>Historial (para calibrar)</h2>
+      <table>
+        <thead><tr><th>Pregunta</th><th class="num">Mejor</th><th>¿Pasa?</th></tr></thead>
+        <tbody id="historial"><tr><td colspan="3" class="hueco">Aún no hay búsquedas.</td></tr></tbody>
+      </table>
+      <p style="margin:10px 0 0"><button class="sec" id="copiar" type="button">Copiar como CSV</button></p>
+    </div>
+  </aside>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const RELEVANTES = ["¿cuándo vence mi factura?", "¿qué es el prorrateo?", "¿qué significa factura en disputa?",
+  "¿qué SLA tiene el enlace MPLS?", "¿qué pasa si me cobraron dos veces?", "¿cuánto tarda una solicitud?"];
+const AJENAS = ["recomiéndame una película", "¿quién ganó el mundial?", "receta de pizza"];
+let porDefecto = { umbral: 0.82, lam: 0.5 };
+const historial = [];
+
+function escapar(t) {
+  return String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function fijar(umbral, lam) {
+  $("umbral").value = umbral; $("lam").value = lam;
+  $("vUmbral").textContent = Number(umbral).toFixed(2); $("vLam").textContent = Number(lam).toFixed(2);
+}
+function chips() {
+  const html = [...RELEVANTES.map((q) => [q, ""]), ...AJENAS.map((q) => [q, " ajena"])]
+    .map(([q, c]) => `<button type="button" class="chip${c}">${escapar(q)}</button>`)
+    .join("");
+  $("chips").innerHTML = html +
+    '<span class="leyenda">Borde punteado = pregunta ajena (no debería pasar el umbral).</span>';
+  $("chips").querySelectorAll(".chip").forEach((b) => b.onclick = () => { $("q").value = b.textContent; buscar(); });
+}
+
+async function cargarInfo() {
+  try {
+    const r = await fetch("/dev/rag/info");
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || r.status);
+    porDefecto = { umbral: d.parametros.umbral, lam: d.parametros.mmr_lambda };
+    fijar(porDefecto.umbral, porDefecto.lam);
+    $("info").innerHTML = `
+      <dt>Motor</dt><dd>${escapar(d.motor)}</dd>
+      <dt>Fragmentos</dt><dd>${d.fragmentos}</dd>
+      <dt>Fuentes</dt><dd>${d.fuentes.map(escapar).join("<br>")}</dd>
+      <dt>Secciones</dt><dd>${d.secciones.map(escapar).join(", ")}</dd>
+      <dt>K</dt><dd>${d.parametros.k_inicial} candidatos → ${d.parametros.k_final} al prompt</dd>
+      ${d.aviso ? `<dt>Aviso</dt><dd>${escapar(d.aviso)}</dd>` : ""}`;
+    $("estado").textContent = "Listo. Escribe una pregunta o usa un ejemplo.";
+  } catch (e) {
+    $("estado").textContent = "No se pudo cargar el índice: " + e.message;
+  }
+}
+
+function tarjeta(h, umbral) {
+  const donde = h.pagina ? `pág. ${h.pagina}` : escapar(h.id);
+  const tags = (h.al_prompt ? '<span class="tag prompt">al prompt</span>' : "") +
+    (h.pasa_umbral ? '<span class="tag ok">pasa</span>' : '<span class="tag no">bajo umbral</span>');
+  return `<div class="resultado${h.pasa_umbral ? "" : " fuera"}">
+    <div class="cab">
+      <span class="score">${h.score.toFixed(3)}</span>
+      <span class="barra" title="puntaje vs. umbral"><i style="width:${Math.max(0, Math.min(1, h.score)) * 100}%"></i>
+        <span class="corte" style="left:${umbral * 100}%"></span></span>
+      ${tags}
+      <span>${escapar(h.fuente)} · ${donde} · ${escapar(h.seccion)}</span>
+    </div>
+    <div class="texto">${escapar(h.texto)}</div>
+  </div>`;
+}
+
+function pintarHistorial() {
+  $("historial").innerHTML = historial.slice().reverse().map((h) =>
+    `<tr><td>${escapar(h.q)}</td><td class="num">${h.mejor.toFixed(3)}</td><td>${h.pasa ? "sí" : "no"}</td></tr>`).join("");
+}
+
+async function buscar() {
+  const q = $("q").value.trim();
+  if (!q) return;
+  $("ir").disabled = true;
+  $("estado").textContent = "Buscando…";
+  const params = new URLSearchParams({ q, k: $("k").value, umbral: $("umbral").value, lam: $("lam").value });
+  try {
+    const r = await fetch("/dev/rag/buscar?" + params);
+    const d = await r.json();
+    if (!r.ok) throw new Error(typeof d.detail === "string" ? d.detail : JSON.stringify(d.detail));
+    const pasan = d.resultados.filter((h) => h.pasa_umbral).length;
+    $("estado").textContent = `${d.resultados.length} fragmentos · ${pasan} pasan el umbral ${d.umbral.toFixed(2)} · ` +
+      `${d.al_prompt.length} llegarían al prompt · motor ${d.motor} · ${d.ms} ms · orden de elección del MMR`;
+    $("resultados").innerHTML = d.resultados.map((h) => tarjeta(h, d.umbral)).join("") ||
+      '<div class="panel resultado hueco">Sin resultados.</div>';
+    const mejor = d.resultados.length ? d.resultados[0].score : 0;
+    historial.push({ q, mejor, pasa: mejor >= d.umbral });
+    pintarHistorial();
+  } catch (e) {
+    $("estado").textContent = "Error: " + e.message;
+  } finally {
+    $("ir").disabled = false;
+  }
+}
+
+$("form").onsubmit = (e) => { e.preventDefault(); buscar(); };
+$("umbral").oninput = () => fijar($("umbral").value, $("lam").value);
+$("lam").oninput = () => fijar($("umbral").value, $("lam").value);
+$("umbral").onchange = $("lam").onchange = $("k").onchange = () => { if ($("q").value.trim()) buscar(); };
+$("restaurar").onclick = () => { fijar(porDefecto.umbral, porDefecto.lam); if ($("q").value.trim()) buscar(); };
+$("copiar").onclick = async () => {
+  const csv = ["pregunta,mejor_puntaje,pasa"].concat(
+    historial.map((h) => `"${h.q.replace(/"/g, '""')}",${h.mejor.toFixed(4)},${h.pasa ? "si" : "no"}`)).join("\n");
+  try { await navigator.clipboard.writeText(csv); $("estado").textContent = "Historial copiado como CSV."; }
+  catch { $("estado").textContent = "No se pudo copiar al portapapeles."; }
+};
+fijar(porDefecto.umbral, porDefecto.lam);
+chips();
+cargarInfo();
+</script>
+</body>
+</html>
