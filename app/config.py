@@ -43,7 +43,8 @@ ENTORNO = (os.getenv("ENTORNO") or "prod").strip().lower()  # vacío = sin defin
 # Aviso por correo al derivar un caso (POST /mi/casos). El caso y el resultado
 # del aviso se registran siempre en interaccion_log.
 # - NOTIFICAR_DERIVACIONES desactivado: no se envía nada.
-# - CORREO_DERIVACIONES definido: se REDIRIGE ahí (pruebas), indicando a quién iba.
+# - CORREO_DERIVACIONES definido y ENTORNO=dev: se REDIRIGE ahí (pruebas), indicando a
+#   quién iba. Fuera de dev se ignora (ver app/data/casos.py, _redireccion_de_prueba).
 # - Sin redirección: va al ejecutivo (y al responsable en CS-06), salvo a dominios
 #   reservados (.example, como los de la base de prueba), que no existen.
 # Un fallo de SMTP no deshace el caso.
@@ -84,3 +85,14 @@ RAG_MMR_LAMBDA = float(os.getenv("RAG_MMR_LAMBDA", "0.5"))  # 1 = relevancia, 0 
 # Fragmentación de los PDF (los JSON van un registro por fragmento).
 CHUNK_MAX_PALABRAS = int(os.getenv("CHUNK_MAX_PALABRAS", "150"))
 CHUNK_OVERLAP_PALABRAS = int(os.getenv("CHUNK_OVERLAP_PALABRAS", "25"))
+
+# --- Chat (app/agente) --------------------------------------------------------
+# Cada vuelta es una llamada al modelo: tope para que un error no encadene llamadas.
+CHAT_MAX_VUELTAS = int(os.getenv("CHAT_MAX_VUELTAS", "3"))
+# Mensajes de la conversación que se reenvían en cada turno (memoria corta).
+CHAT_MAX_MENSAJES = int(os.getenv("CHAT_MAX_MENSAJES", "8"))
+CHAT_MAX_CONVERSACIONES = int(os.getenv("CHAT_MAX_CONVERSACIONES", "200"))
+CHAT_MAX_TOKENS = int(os.getenv("CHAT_MAX_TOKENS", "600"))
+CHAT_TEMPERATURA = float(os.getenv("CHAT_TEMPERATURA", "0.3"))
+# Cargar el índice del RAG al arrancar la API (en segundo plano), no en el primer mensaje.
+RAG_PRECARGAR = (os.getenv("RAG_PRECARGAR") or "true").strip().lower() in ("1", "true", "si", "sí", "yes")

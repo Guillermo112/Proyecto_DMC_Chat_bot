@@ -9,8 +9,9 @@ Reglas (ver docs/capa_datos.md, "Casos"):
   toma de ella la referencia canónica y el monto (nunca del bot).
 - Sin duplicados: si ya hay un caso abierto equivalente, se devuelve ese. La
   comprobación y el INSERT van en la misma transacción (`BEGIN IMMEDIATE`).
-- Aviso: siempre en `interaccion_log`; por correo solo a CORREO_DERIVACIONES y
-  después de confirmar la transacción, así un fallo de SMTP no pierde el caso.
+- Aviso: siempre en `interaccion_log`; por correo (NOTIFICAR_DERIVACIONES) al
+  ejecutivo, o a CORREO_DERIVACIONES solo con ENTORNO=dev, y después de confirmar
+  la transacción, así un fallo de SMTP no pierde el caso.
 """
 import logging
 from datetime import datetime
@@ -160,12 +161,27 @@ def _destinatarios(*personas) -> list:
     return resultado
 
 
+def _redireccion_de_prueba() -> str:
+    """Casilla de CORREO_DERIVACIONES, solo con ENTORNO=dev.
+
+    Fuera de dev se ignora: un .env copiado de desarrollo mandaría a una sola casilla
+    los datos de los casos de todos los clientes en vez de a cada ejecutivo.
+    """
+    if not config.CORREO_DERIVACIONES:
+        return ""
+    if config.ENTORNO != "dev":
+        log.warning("CORREO_DERIVACIONES se ignora con ENTORNO=%s: el aviso va al ejecutivo real.",
+                    config.ENTORNO)
+        return ""
+    return config.CORREO_DERIVACIONES
+
+
 def _avisar(numero: str, tipo: str, cliente, palabras: str, sustento: str, destinatarios: list) -> tuple[str, str]:
     """Avisa por correo a quien se derivó el caso. Devuelve (resultado, texto para el log).
 
     - NOTIFICAR_DERIVACIONES desactivado: no se envía nada.
-    - CORREO_DERIVACIONES definido: se REDIRIGE ahí un solo correo (pruebas), que
-      dice a quién iba dirigido.
+    - CORREO_DERIVACIONES definido y ENTORNO=dev: se REDIRIGE ahí un solo correo
+      (pruebas), que dice a quién iba dirigido. Fuera de dev se ignora.
     - Sin redirección: va a cada destinatario real, salvo a dominios reservados
       (`.example`), que en la base de prueba no existen.
     El caso ya está registrado: un fallo de SMTP solo se anota.
@@ -181,16 +197,17 @@ def _avisar(numero: str, tipo: str, cliente, palabras: str, sustento: str, desti
     )
     asunto = f"[Anticipa] Caso {numero} derivado: {tipo}"
 
-    if config.CORREO_DERIVACIONES:  # redirección de pruebas
-        envios = [(config.CORREO_DERIVACIONES, f"[PRUEBA] {asunto}", f"Para: {para}\n\n{cuerpo}")]
+    redireccion = _redireccion_de_prueba()
+    if redireccion:  # solo en desarrollo
+        envios = [(redireccion, f"[PRUEBA] {asunto}", f"Para: {para}\n\n{cuerpo}")]
         exito = (f"Aviso para {nombres} redirigido a la casilla de prueba "
-                 f"({otp.enmascarar(config.CORREO_DERIVACIONES)}).")
+                 f"({otp.enmascarar(redireccion)}).")
     else:
         reales = [d for d in destinatarios if not dominio_reservado(d["correo"])]
         omitidos = [d for d in destinatarios if dominio_reservado(d["correo"])]
         if not reales:
             return "no_enviado", (f"Aviso por correo no enviado: el correo de {nombres} es de prueba "
-                                  "(dominio reservado). Definir CORREO_DERIVACIONES para redirigirlo.")
+                                  "(dominio reservado). En dev: CORREO_EJECUTIVO_n o CORREO_DERIVACIONES.")
         envios = [(d["correo"], asunto, cuerpo) for d in reales]
         exito = "Aviso por correo enviado a " + ", ".join(
             f"{d['nombre']} ({otp.enmascarar(d['correo'])})" for d in reales) + "."

@@ -4,10 +4,9 @@ Sirve para mirar qué recupera el índice y calibrar el umbral y el MMR sin LLM 
 clave. No toca datos de clientes (el RAG nunca los tiene), por eso no pide sesión;
 aun así se monta solo en desarrollo, igual que el CRUD `/api/...` (ver app/main.py).
 
-El índice se construye la primera vez que se usa (leer PDF y cargar el modelo
-tarda ~10 s) y se reutiliza mientras el proceso viva.
+El índice es el mismo del chat (`app.rag.indice.obtener_indice`): se construye la
+primera vez que se usa (~10 s) y se reutiliza mientras el proceso viva.
 """
-import threading
 import time
 from pathlib import Path
 
@@ -15,30 +14,15 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 
 from app import config
-from app.rag import IndiceConocimiento
+from app.rag.indice import IndiceConocimiento, obtener_indice
 
 router = APIRouter(prefix="/dev/rag", tags=["Desarrollo - RAG"])
 
 PAGINA = Path(__file__).resolve().parent.parent / "static" / "rag.html"
 
-_indice: IndiceConocimiento | None = None
-_candado = threading.Lock()
-
-
-def obtener_indice() -> IndiceConocimiento:
-    """Índice único por proceso, construido e indexado con candado."""
-    global _indice
-    if _indice is None:
-        with _candado:
-            if _indice is None:
-                indice = IndiceConocimiento()
-                indice.indexar()
-                _indice = indice
-    return _indice
-
 
 def _umbral_por_defecto(indice: IndiceConocimiento) -> float:
-    return config.RAG_UMBRAL if indice.motor_usado == "denso" else config.RAG_UMBRAL_TFIDF
+    return indice.umbral()
 
 
 @router.get("", include_in_schema=False)
