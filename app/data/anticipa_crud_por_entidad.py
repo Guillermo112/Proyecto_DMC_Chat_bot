@@ -46,7 +46,7 @@ class BaseEntityCRUD:
         return [dict(row) for row in rows]
 
     def _run(self, sql, params=()):
-        with get_connection(self.db_path) as con:
+        with get_connection(self.db_path, escritura=True) as con:
             cur = con.execute(sql, params)
             return cur.rowcount, cur.lastrowid
 

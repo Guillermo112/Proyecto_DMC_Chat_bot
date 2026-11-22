@@ -1,5 +1,5 @@
 """
-Conexión a SQLite en modo lectura y escritura.
+Conexión a SQLite: solo lectura por defecto, escritura explícita con `escritura=True`.
 """
 
 import sqlite3
@@ -11,25 +11,18 @@ from app import config
 
 
 @contextmanager
-def get_connection(
-    db_path: Path | None = None
-) -> Iterator[sqlite3.Connection]:
+def get_connection(db_path: Path | None = None, escritura: bool = False) -> Iterator[sqlite3.Connection]:
+    """Abre la base (solo lectura por defecto) y la cierra al salir.
 
-    """Abre la base de datos en modo lectura y escritura."""
-
+    `escritura=True` (mode=rw) es solo para app/auth y las operaciones de escritura
+    del CRUD; el agente nunca la usa. Al salir sin error se confirma la transacción;
+    si hay una excepción se revierte.
+    """
     ruta = Path(db_path or config.DB_PATH).resolve()
-
-    if not ruta.exists():
-        raise FileNotFoundError(
-            f"No se encontró la base de datos: {ruta}"
-        )
-
-    # Conexión en modo lectura y escritura
-    con = sqlite3.connect(
-        str(ruta),
-        timeout=30
-    )
-
+    if not ruta.is_file():
+        raise FileNotFoundError(f"No se encontró la base de datos: {ruta}")
+    modo = "rw" if escritura else "ro"
+    con = sqlite3.connect(f"{ruta.as_uri()}?mode={modo}", uri=True, timeout=30)
     con.row_factory = sqlite3.Row
 
     try:
