@@ -281,3 +281,33 @@ class AnomaliasCliente(BaseModel):
     tarifas_distintas: list[TarifaDistinta]
     excesos_sin_sustento: list[ExcesoSinSustento]
     averias_sla_incumplido: list[AveriaSlaIncumplido]
+
+
+# ------------------------------------------------- solicitudes
+
+EstadoSolicitud = Literal["abierta", "en_proceso", "cerrada"]
+
+
+class Solicitud(BaseModel):
+    """Solicitud del cliente (CS-06).
+
+    `dias_transcurridos` va hasta la fecha de corte si sigue abierta o en
+    proceso, y hasta `fecha_cierre` si está cerrada. `fuera_de_plazo` solo
+    puede ser True en las no cerradas (misma regla que v_solicitudes_vencidas).
+    """
+    id_solicitud: int
+    tipo: str
+    descripcion: str
+    estado: EstadoSolicitud
+    fecha_registro: str
+    fecha_cierre: str | None
+    dias_transcurridos: int
+    fuera_de_plazo: bool
+    responsable_nombre: str | None
+
+
+class ListaSolicitudes(BaseModel):
+    fecha_corte: str
+    plazo_atencion_dias: int
+    cantidad_fuera_de_plazo: int
+    solicitudes: list[Solicitud]

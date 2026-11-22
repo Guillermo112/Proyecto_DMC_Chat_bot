@@ -13,6 +13,7 @@ from app.schemas.facturacion import (
     LineaFactura,
     LineaPeriodo,
     ListaServicios,
+    ListaSolicitudes,
     NotaCreditoAplicada,
     PaginaFacturas,
     PeriodoComparado,
@@ -21,6 +22,7 @@ from app.schemas.facturacion import (
     SaldoPendiente,
     Servicio,
     ServicioBajaFacturado,
+    Solicitud,
     TarifaDistinta,
 )
 
@@ -39,6 +41,7 @@ __all__ = [
     "LineaFactura",
     "LineaPeriodo",
     "ListaServicios",
+    "ListaSolicitudes",
     "NotaCreditoAplicada",
     "PaginaFacturas",
     "PeriodoComparado",
@@ -47,5 +50,6 @@ __all__ = [
     "SaldoPendiente",
     "Servicio",
     "ServicioBajaFacturado",
+    "Solicitud",
     "TarifaDistinta",
 ]

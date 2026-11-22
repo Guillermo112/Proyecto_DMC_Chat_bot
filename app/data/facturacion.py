@@ -26,6 +26,7 @@ from app.schemas import (
     LineaFactura,
     LineaPeriodo,
     ListaServicios,
+    ListaSolicitudes,
     NotaCreditoAplicada,
     PaginaFacturas,
     PeriodoComparado,
@@ -34,12 +35,14 @@ from app.schemas import (
     SaldoPendiente,
     Servicio,
     ServicioBajaFacturado,
+    Solicitud,
     TarifaDistinta,
 )
 
 ESTADOS_FACTURA = {"emitida", "pagada", "vencida", "en_disputa", "anulada"}
 ESTADOS_PENDIENTES = ("emitida", "vencida", "en_disputa")
 ESTADOS_SERVICIO = {"activo", "baja"}
+ESTADOS_SOLICITUD = {"abierta", "en_proceso", "cerrada"}
 # Mismo umbral que la vista v_variacion_facturacion (db/schema.sql).
 UMBRAL_VARIACION_PCT = 25.0
 _PATRON_PERIODO = re.compile(r"[0-9]{4}-(0[1-9]|1[0-2])")  # [0-9], no \d: \d acepta dígitos Unicode
@@ -607,3 +610,55 @@ def detectar_anomalias(cliente_id: int, db_path: Path | None = None) -> Anomalia
         )
         fecha_corte = _fecha_actual(con)
     return AnomaliasCliente(fecha_corte=fecha_corte, cantidad=sum(len(g) for g in grupos.values()), **grupos)
+
+
+# ------------------------------------------------- solicitudes
+
+def consultar_solicitudes(
+    cliente_id: int, estado: str | None = None, db_path: Path | None = None
+) -> ListaSolicitudes:
+    """Solicitudes del cliente con días transcurridos y si están fuera de plazo (CS-06).
+
+    Los días se cuentan como en `v_solicitudes_vencidas`: desde `fecha_registro`
+    hasta la fecha de corte ficticia (`parametro.fecha_actual`), o hasta
+    `fecha_cierre` si está cerrada. El plazo es el del cliente.
+    """
+    _validar_cliente_id(cliente_id)
+    if estado is not None and estado not in ESTADOS_SOLICITUD:
+        raise ValueError(f"Estado de solicitud inválido. Permitidos: {sorted(ESTADOS_SOLICITUD)}")
+    condiciones, params = ["so.id_cliente = ?"], [cliente_id]
+    if estado is not None:
+        condiciones.append("so.estado = ?")
+        params.append(estado)
+    with get_connection(db_path) as con:
+        fecha_corte = _fecha_actual(con)
+        fila_plazo = con.execute(
+            "SELECT plazo_atencion_dias FROM cliente WHERE id_cliente = ?", (cliente_id,)
+        ).fetchone()
+        filas = con.execute(
+            f"""
+            SELECT so.id_solicitud, so.tipo, so.descripcion, so.estado, so.fecha_registro, so.fecha_cierre,
+                   CAST(julianday(CASE WHEN so.estado = 'cerrada' THEN so.fecha_cierre ELSE ? END)
+                        - julianday(so.fecha_registro) AS INTEGER) AS dias_transcurridos,
+                   p.nombre AS responsable_nombre
+            FROM solicitud so
+            LEFT JOIN personal p ON p.id_personal = so.id_responsable
+            WHERE {" AND ".join(condiciones)}
+            ORDER BY so.fecha_registro DESC, so.id_solicitud DESC
+            """,
+            [fecha_corte, *params],
+        ).fetchall()
+        if fila_plazo is None:  # cliente inexistente: sin solicitudes, plazo general
+            fila_plazo = con.execute(
+                "SELECT CAST(valor AS INTEGER) AS plazo_atencion_dias FROM parametro WHERE clave = ?",
+                ("plazo_atencion_dias",),
+            ).fetchone()
+    plazo = fila_plazo["plazo_atencion_dias"]
+    solicitudes = [
+        Solicitud(**dict(f), fuera_de_plazo=f["estado"] != "cerrada" and f["dias_transcurridos"] > plazo)
+        for f in filas
+    ]
+    return ListaSolicitudes(
+        fecha_corte=fecha_corte, plazo_atencion_dias=plazo,
+        cantidad_fuera_de_plazo=sum(s.fuera_de_plazo for s in solicitudes), solicitudes=solicitudes,
+    )

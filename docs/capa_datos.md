@@ -178,13 +178,33 @@ detección de `db/schema.sql` (filtradas siempre por `cliente_id`).
   (25, 30 y los duplicados anulados de 15, 24 y 38) no aparecen.
 - **Uso en el agente:** paso 3 del método del PDF ("busca anomalías").
 
+### `consultar_solicitudes(cliente_id, estado=None) -> ListaSolicitudes`
+
+Solicitudes del cliente con su antigüedad y si están fuera de plazo.
+
+- **Tablas:** `solicitud`, `personal`, `cliente`, `parametro`.
+- **Filtro:** `estado` ∈ `abierta`, `en_proceso`, `cerrada` (por defecto, todas),
+  de la más reciente a la más antigua.
+- **Devuelve:** `fecha_corte`, `plazo_atencion_dias` (el del cliente, 10 en la
+  base), `cantidad_fuera_de_plazo` y por solicitud: `tipo`, `descripcion`,
+  `estado`, fechas, `dias_transcurridos`, `fuera_de_plazo` y
+  `responsable_nombre`.
+- **Días:** misma fórmula que `v_solicitudes_vencidas` (días enteros desde
+  `fecha_registro` hasta la fecha de corte ficticia). En las cerradas se
+  cuentan hasta `fecha_cierre`, y nunca están fuera de plazo.
+- **No da fecha de resolución:** la base no la tiene y el PDF prohíbe
+  prometerla.
+- **Uso en el agente:** CS-06 (ejemplo: cliente 10, abierta el 2026-11-14,
+  21 días con plazo de 10). Avisar al responsable es escritura y queda para
+  "registrar y derivar caso".
+
 ## 3. Casuísticas y funciones
 
 | Casuística | Función principal | Comentario |
 |---|---|---|
 | CS-01 Factura duplicada | `detectar_anomalias`, `listar_facturas` | Saldo, resumen y comparación marcan el periodo en `periodos_multiples` / `facturas_multiples` sin sumar. |
 | CS-02 a CS-05, CS-07 | `detectar_anomalias`, `obtener_servicios`, `detalle_factura` | Detección y monto observado. El tramo y el aprobador (`calcular_ajuste`) están pendientes. |
-| CS-06 Solicitud fuera de plazo | — | Pendiente (`solicitud`, `v_solicitudes_vencidas`). |
+| CS-06 Solicitud fuera de plazo | `consultar_solicitudes` | Días y plazo; avisar al responsable queda pendiente (escritura). |
 | CS-08 Gesto comercial | — | Pendiente (`v_gestos_mes_actual`). |
 | CS-09 Variación de facturación | `comparar_periodos` | Líneas que cambiaron y su servicio (alta o baja). |
 | CS-10 Prorrateo | `detalle_factura`, `comparar_periodos` | Línea de tipo `prorrateo`; la fecha de activación viene en el `servicio` de la comparación. |

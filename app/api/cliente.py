@@ -23,11 +23,12 @@ from app.schemas import (
     ComparacionPeriodos,
     FacturaDetalle,
     ListaServicios,
+    ListaSolicitudes,
     PaginaFacturas,
     ResumenFacturacion,
     SaldoPendiente,
 )
-from app.schemas.facturacion import EstadoFactura, EstadoServicio
+from app.schemas.facturacion import EstadoFactura, EstadoServicio, EstadoSolicitud
 
 router = APIRouter(
     prefix="/mi",
@@ -138,3 +139,12 @@ def mis_anomalias(cliente_id: int = Depends(cliente_actual)):
     Montos sin IGV y observados: no son una devolución ni un ajuste aprobado.
     """
     return facturacion.detectar_anomalias(cliente_id)
+
+
+@router.get("/solicitudes", response_model=ListaSolicitudes)
+def mis_solicitudes(
+    estado: EstadoSolicitud | None = Query(None, description="abierta, en_proceso o cerrada; por defecto, todas"),
+    cliente_id: int = Depends(cliente_actual),
+):
+    """Solicitudes con días transcurridos y si están fuera del plazo de atención (CS-06)."""
+    return _400(facturacion.consultar_solicitudes, cliente_id, estado)

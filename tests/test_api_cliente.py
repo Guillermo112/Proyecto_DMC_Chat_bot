@@ -11,7 +11,7 @@ api = TestClient(app)
 CLIENTE_1, CLIENTE_2 = 1, 2
 FACTURA_DEL_CLIENTE_1 = "F001-000254"
 RUTAS = ["/mi/perfil", "/mi/facturas", f"/mi/facturas/{FACTURA_DEL_CLIENTE_1}", "/mi/saldo",
-         "/mi/resumen?fecha_desde=2026-06-01&fecha_hasta=2026-11-30", "/mi/comparar?periodo_b=2026-10", "/mi/servicios", "/mi/anomalias"]
+         "/mi/resumen?fecha_desde=2026-06-01&fecha_hasta=2026-11-30", "/mi/comparar?periodo_b=2026-10", "/mi/servicios", "/mi/anomalias", "/mi/solicitudes"]
 
 
 def _como(cliente_id: int) -> dict:
