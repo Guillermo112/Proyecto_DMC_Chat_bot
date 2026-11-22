@@ -162,3 +162,50 @@ def test_api_reiniciar(cliente_api):
 def test_sirve_la_pagina():
     r = TestClient(app).get("/chat")
     assert r.status_code == 200 and "Anticipa" in r.text
+
+
+# -- saludo ----------------------------------------------------------------------
+def test_saludo_menciona_hallazgos_y_queda_en_el_historial(indice):
+    router = RouterFalso(_texto("Te explico la duplicada."))
+    servicio = ServicioChat(router=router, indice=indice)
+    texto = servicio.saludar(1, "c1")
+    assert texto.startswith("¡Hola") and "factura duplicada" in texto and "¿Quieres que te lo explique" in texto
+    assert router.llamadas == []  # el saludo no usa el modelo
+    servicio.responder(1, "c1", "Sí")
+    assert [m["role"] for m in router.llamadas[0]["mensajes"]][:3] == ["system", "assistant", "user"]
+
+
+def test_saludo_sin_hallazgos_pregunta_que_hacer(indice):
+    texto = ServicioChat(router=RouterFalso(), indice=indice).saludar(11, "c1")
+    assert "¿Qué quieres hacer hoy?" in texto and "revisé tu cuenta" not in texto
+
+
+def test_saludo_recuerda_el_caso_en_revision(indice, tmp_path, monkeypatch):
+    import shutil
+
+    from app.data import casos
+    from app.schemas.casos import NuevoCaso
+
+    copia = tmp_path / "anticipa.db"
+    shutil.copy(config.DB_PATH, copia)
+    monkeypatch.setattr(config, "DB_PATH", copia)
+    monkeypatch.setattr(config, "NOTIFICAR_DERIVACIONES", False)
+    r = casos.registrar_caso(1, NuevoCaso(tipo="factura_duplicada", canal="web", palabras_cliente="dos facturas"))
+    texto = ServicioChat(router=RouterFalso(), indice=indice).saludar(1, "c1")
+    assert f"Tu caso {r.numero_caso} sigue en revisión" in texto and "factura duplicada" not in texto
+
+
+def test_saludo_reinicia_la_conversacion(indice):
+    router = RouterFalso(_texto("a"), _texto("b"))
+    servicio = ServicioChat(router=router, indice=indice)
+    servicio.responder(1, "c1", "hola")
+    servicio.saludar(1, "c1")
+    servicio.responder(1, "c1", "otra")
+    assert [m["role"] for m in router.llamadas[-1]["mensajes"]] == ["system", "assistant", "user"]
+
+
+def test_api_saludo(cliente_api):
+    c = cliente_api(RouterFalso())
+    assert c.post("/mi/chat/saludo", json={"conversacion_id": "abc"}).status_code == 401
+    r = c.post("/mi/chat/saludo", json={"conversacion_id": "abc"}, headers=_token(11))
+    assert r.status_code == 200 and "¿Qué quieres hacer hoy?" in r.json()["respuesta"]

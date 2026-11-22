@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 
 from app.agente import ChatNoDisponible, ServicioChat, obtener_servicio
 from app.auth.sesion import cliente_actual
-from app.schemas.chat import ChatPeticion, ChatRespuesta
+from app.schemas.chat import ChatPeticion, ChatRespuesta, SaludoPeticion, SaludoRespuesta
 
 router = APIRouter(prefix="/mi", tags=["Chat"], dependencies=[Depends(cliente_actual)])
 paginas = APIRouter()
@@ -37,6 +37,17 @@ def chat(peticion: ChatPeticion, cliente_id: int = Depends(cliente_actual),
         llamadas_modelo=turno.llamadas, tokens=turno.tokens, modelo=turno.modelo,
         ms=turno.ms, aviso=turno.aviso,
     )
+
+
+@router.post("/chat/saludo", response_model=SaludoRespuesta)
+def saludo(peticion: SaludoPeticion, cliente_id: int = Depends(cliente_actual),
+           servicio: ServicioChat = Depends(obtener_servicio)):
+    """Empieza la conversación: saluda por su nombre, revisa la cuenta y pregunta qué hacer.
+
+    No usa el modelo (sin costo); el saludo queda en el historial para que el modelo
+    entienda la respuesta del cliente ("sí, explícamelo").
+    """
+    return SaludoRespuesta(respuesta=servicio.saludar(cliente_id, peticion.conversacion_id))
 
 
 @router.delete("/chat/{conversacion_id}", status_code=204)

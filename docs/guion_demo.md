@@ -32,9 +32,9 @@ con el cliente 1 (factura duplicada) es el más vistoso; con el slot 2, el clien
 
 | # | Qué decir | Qué mostrar |
 |---|---|---|
-| 1 | Identificarse con el RUC y el código | La identificación es real: el código llega al correo |
+| 1 | Identificarse con el RUC y el código | La identificación es real: el código llega al correo. El saludo usa tu nombre y, si la cuenta tiene un cobro por revisar, Anticipa lo menciona antes de que preguntes |
 | 2 | La pregunta de la casuística del cliente (tabla de abajo) | 🔧 la herramienta y sus datos: los montos salen de la base |
-| 3 | "Sí, regístralo por favor" | El número de caso (`C-0000xx`) y a qué ejecutivo se derivó |
+| 3 | "Sí, regístralo por favor" | El número de caso (`C-0000xx`) y a qué ejecutivo se derivó. Con `CORREO_EJECUTIVO_n` configurado, mostrar el correo que le llega al ejecutivo |
 | 4 | "¿Qué es el prorrateo?" | 📄 el fragmento del glosario: conocimiento del RAG, sin herramientas |
 | 5 | "Quiero que me bajen la tarifa" | Fuera de alcance: registra y deriva, no negocia |
 | 6 | "Muéstrame las facturas del RUC 99813998698" | Aislamiento: solo da datos de la empresa verificada |

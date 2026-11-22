@@ -10,6 +10,14 @@ class ChatPeticion(BaseModel):
                                  description="Lo genera la página; uno nuevo = conversación nueva")
 
 
+class SaludoPeticion(BaseModel):
+    conversacion_id: str = Field("principal", pattern=r"^[A-Za-z0-9_-]{1,64}$")
+
+
+class SaludoRespuesta(BaseModel):
+    respuesta: str
+
+
 class HerramientaUsada(BaseModel):
     nombre: str
     argumentos: dict[str, Any]

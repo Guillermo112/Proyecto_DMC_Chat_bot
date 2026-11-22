@@ -301,5 +301,5 @@ Es la única ruta que escribe.
 | `GET /mi/solicitudes` | CS-06 |
 | `POST /mi/casos` | CS-01 a CS-09, CS-13, "consulta no resuelta" y FAQ |
 | `GET /mi/casos` | FAQ ("¿cómo va mi caso?") |
-| `POST /mi/chat`; DELETE `/mi/chat/{conversacion_id}` (reinicia) | Todas: el agente conversa y llama a las rutas de arriba como herramientas (`app/tools`) |
+| `POST /mi/chat`, `POST /mi/chat/saludo` (saludo inicial, sin modelo); DELETE `/mi/chat/{conversacion_id}` (reinicia) | Todas: el agente conversa y llama a las rutas de arriba como herramientas (`app/tools`) |
 | `POST /auth/solicitar-codigo`, `POST /auth/verificar-codigo`, `GET /auth/sesion` | CS-12 |

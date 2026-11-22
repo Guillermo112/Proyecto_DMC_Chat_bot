@@ -25,6 +25,7 @@ from typing import Any, Callable
 
 from app import config
 from app.agente.prompt import SYSTEM_PROMPT
+from app.data import facturacion
 from app.llm import SinProveedores, crear_router
 from app.tools import ESQUEMAS, Herramientas
 
@@ -37,6 +38,22 @@ IDEMPOTENTES = frozenset({"ver_perfil", "listar_facturas", "ver_factura", "ver_s
                           "consultar_solicitudes", "listar_casos"})
 MAX_RESULTADO = 12000   # caracteres de un resultado de herramienta enviados al modelo
 SIN_RESPUESTA = "No pude completar la respuesta. ¿Me lo repites con otras palabras?"
+
+# Para el saludo: qué se encontró al revisar la cuenta (anomalías sin caso abierto).
+ETIQUETAS_ANOMALIA = {
+    "facturas_duplicadas": ("una factura duplicada", "facturas duplicadas"),
+    "servicios_baja_facturados": ("un servicio dado de baja que se sigue facturando",
+                                  "servicios dados de baja que se siguen facturando"),
+    "tarifas_distintas": ("una tarifa distinta a la pactada", "tarifas distintas a las pactadas"),
+    "excesos_sin_sustento": ("un exceso de consumo sin sustento", "excesos de consumo sin sustento"),
+    "averias_sla_incumplido": ("una avería que superó el SLA", "averías que superaron el SLA"),
+}
+OPCIONES = "\n".join([
+    "- revisar o explicar una factura",
+    "- ver si hay cobros que no corresponden",
+    "- consultar tu saldo y vencimientos",
+    "- revisar tus solicitudes o tus casos",
+])
 
 
 class ChatNoDisponible(RuntimeError):
@@ -104,6 +121,49 @@ class ServicioChat:
     def reiniciar(self, cliente_id: int, conversacion_id: str) -> None:
         with self._candado:
             self._conversaciones.pop((cliente_id, conversacion_id), None)
+
+    # -- saludo -----------------------------------------------------------------
+    def saludar(self, cliente_id: int, conversacion_id: str) -> str:
+        """Saludo al autenticarse: sin modelo (no cuesta tokens) y guardado en el historial,
+        para que el modelo sepa qué se le preguntó al cliente si responde "sí".
+
+        Revisa la cuenta antes de saludar (Anticipa se anticipa al reclamo): si hay
+        anomalías sin caso abierto, las menciona y ofrece explicarlas.
+        """
+        self.reiniciar(cliente_id, conversacion_id)
+        texto = self._texto_saludo(cliente_id)
+        self._historial((cliente_id, conversacion_id)).append({"role": "assistant", "content": texto})
+        return texto
+
+    @staticmethod
+    def _texto_saludo(cliente_id: int) -> str:
+        try:
+            cliente = facturacion.obtener_cliente(cliente_id)
+            anomalias = facturacion.detectar_anomalias(cliente_id)
+        except Exception as exc:  # noqa: BLE001 - un saludo genérico es mejor que ninguno
+            log.warning("chat.saludo_sin_datos %s: %s", type(exc).__name__, exc)
+            return "¡Hola! Soy Anticipa, tu asistente de facturación. ¿Qué quieres hacer hoy? Puedo:\n" + OPCIONES
+        nombre = (cliente.contacto_nombre or "").split()[0] if cliente and cliente.contacto_nombre else ""
+        inicio = (f"¡Hola{', ' + nombre if nombre else ''}! Soy Anticipa, tu asistente de facturación "
+                  f"({cliente.razon_social}).")
+        hallazgos, en_revision = [], set()
+        for campo, (uno, varios) in ETIQUETAS_ANOMALIA.items():
+            todas = getattr(anomalias, campo)
+            en_revision |= {a.caso_abierto for a in todas if getattr(a, "caso_abierto", None)}
+            pendientes = [a for a in todas if not getattr(a, "caso_abierto", None)]
+            if len(pendientes) == 1:
+                hallazgos.append(uno)
+            elif pendientes:
+                hallazgos.append(f"{len(pendientes)} {varios}")
+        if en_revision:
+            casos_txt = ", ".join(sorted(en_revision))
+            inicio += (f" Tu caso {casos_txt} sigue en revisión con tu ejecutivo." if len(en_revision) == 1
+                       else f" Tus casos {casos_txt} siguen en revisión con tu ejecutivo.")
+        if hallazgos:
+            lista = hallazgos[0] if len(hallazgos) == 1 else ", ".join(hallazgos[:-1]) + " y " + hallazgos[-1]
+            return (f"{inicio}\n\nAntes de empezar: revisé tu cuenta y encontré {lista} que conviene "
+                    "revisar. ¿Quieres que te lo explique, o prefieres consultar otra cosa?")
+        return f"{inicio}\n\n¿Qué quieres hacer hoy? Puedo:\n{OPCIONES}"
 
     # -- RAG previo -------------------------------------------------------------
     def _contexto(self, mensaje: str) -> tuple[str, list[dict[str, Any]], str | None]:

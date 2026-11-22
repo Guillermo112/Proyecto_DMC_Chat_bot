@@ -202,10 +202,17 @@ async function abrirChat() {
   $("login").classList.add("oculto");
   $("app").classList.remove("oculto");
   $("barraSesion").classList.remove("oculto");
-  if (!$("mensajes").children.length) {
-    agregar("bot", `¡Hola! Soy Anticipa, tu asistente de facturación (${perfil.razon_social}). ¿En qué te ayudo?`);
-  }
+  if (!$("mensajes").children.length) await saludar();
   $("entrada").focus();
+}
+
+async function saludar() {
+  try {
+    const d = await api("/mi/chat/saludo", { method: "POST", body: JSON.stringify({ conversacion_id: conversacion }) });
+    agregar("bot", d.respuesta);
+  } catch {
+    agregar("bot", "¡Hola! Soy Anticipa, tu asistente de facturación. ¿Qué quieres hacer hoy?");
+  }
 }
 
 function cerrarSesion(motivo) {
@@ -289,6 +296,7 @@ $("nueva").onclick = async () => {
   conversacion = nuevoId();
   $("mensajes").innerHTML = "";
   agregar("sistema", "Conversación nueva: el asistente ya no recuerda lo anterior.");
+  await saludar();
 };
 
 if (token) abrirChat();
