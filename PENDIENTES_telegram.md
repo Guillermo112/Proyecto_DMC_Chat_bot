@@ -71,8 +71,10 @@ paso se implementan); al terminar un paso, marcarlas ✅ allí.
    mensajes cuyo HTML cabe en 4096, entre líneas y, si no alcanza, por palabras. El bot
    envía con `parse_mode=HTML` y, si Telegram rechaza el HTML, reenvía esa parte en texto
    plano. Tests: `tests/test_telegram_formato.py` y `tests/test_telegram_bot.py`.
-6. [ ] **Arranque** en el `lifespan` de `app/main.py` (hilo daemon, solo con token) y
-   parada ordenada al cerrar la API.
+6. [x] **Arranque** (hecho): `arrancar()` en `app/telegram/bot.py` levanta el bot en un
+   hilo daemon (solo con token, uno por proceso) y avisa si no hay lista de permitidos;
+   el `lifespan` de `app/main.py` lo arranca y lo detiene al cerrar. `run.bat` muestra el
+   estado del bot. `tests/conftest.py` vacía el token en todos los tests.
 7. [ ] **Tests** con `httpx.MockTransport` (sin red ni token):
    - Login: RUC inválido, RUC inexistente (mismo mensaje), código erróneo, bloqueo por
      intentos, sesión vencida, límite por chat.

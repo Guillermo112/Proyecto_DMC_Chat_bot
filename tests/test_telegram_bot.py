@@ -358,3 +358,94 @@ def test_red_caida_no_tumba_el_bucle(armar, caplog):
     api.caer_red = True
     _correr(bot, 0.1)
     assert "telegram.error" in caplog.text and TOKEN not in caplog.text
+
+
+# -- arranque dentro de la API (paso 6) -------------------------------------------------
+
+def test_sin_token_no_arranca(monkeypatch):
+    """[5.1]"""
+    from app import config
+
+    monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", "")
+    antes = {t.name for t in threading.enumerate()}
+    assert b.arrancar() is None
+    assert "telegram-bot" not in {t.name for t in threading.enumerate()} - antes
+
+
+class ServicioFalso:
+    def saludar(self, cliente_id, conversacion_id):
+        return "hola"
+
+    def reiniciar(self, cliente_id, conversacion_id):
+        pass
+
+
+def test_arranca_atiende_y_se_detiene(monkeypatch, caplog):
+    """[5.1] [5.2] Con token arranca un solo bot por proceso; al detenerlo se puede volver a arrancar."""
+    from app import config
+
+    monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", TOKEN)
+    monkeypatch.setattr(config, "TELEGRAM_USUARIOS_PERMITIDOS", frozenset({CHAT}))
+    api = TelegramFalso()
+    api.actualizaciones = [[_mensaje("/start"), _mensaje("/start", chat=999)]]
+    en_marcha = b.arrancar(servicio=ServicioFalso(), http=httpx.Client(transport=httpx.MockTransport(api)))
+    try:
+        assert en_marcha is not None and en_marcha.hilo.daemon and en_marcha.hilo.is_alive()
+        assert b.arrancar(servicio=ServicioFalso()) is None  # [5.2] segundo bot: no
+        for _ in range(200):
+            if api.enviados():
+                break
+            time.sleep(0.01)
+        assert api.metodos()[0] == "deleteWebhook"
+        assert len(api.enviados()) == 1 and "RUC" in api.enviados()[0]
+        assert api.enviados(999) == []  # fuera de la lista
+        assert "solo responde a 1 usuario" in caplog.text
+    finally:
+        en_marcha.detener()
+    assert not en_marcha.hilo.is_alive()
+    otro = b.arrancar(servicio=ServicioFalso(), http=httpx.Client(transport=httpx.MockTransport(TelegramFalso())))
+    assert otro is not None
+    otro.detener()
+
+
+def test_sin_lista_avisa_que_responde_a_cualquiera(monkeypatch, caplog):
+    from app import config
+
+    monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", TOKEN)
+    en_marcha = b.arrancar(servicio=ServicioFalso(),
+                           http=httpx.Client(transport=httpx.MockTransport(TelegramFalso())))
+    en_marcha.detener()
+    assert "SIN lista de usuarios permitidos" in caplog.text
+
+
+def test_la_api_arranca_y_detiene_el_bot(monkeypatch):
+    """El lifespan de app.main llama a arrancar() al abrir y detiene el bot al cerrar."""
+    from fastapi.testclient import TestClient
+
+    from app import config
+    from app.main import app
+
+    monkeypatch.setattr(config, "RAG_PRECARGAR", False)
+    eventos = []
+
+    class Falso:
+        def detener(self):
+            eventos.append("detener")
+
+    monkeypatch.setattr(b, "arrancar", lambda: eventos.append("arrancar") or Falso())
+    with TestClient(app) as cliente:
+        assert cliente.get("/health").status_code == 200
+        assert eventos == ["arrancar"]
+    assert eventos == ["arrancar", "detener"]
+
+
+def test_la_api_sin_token_funciona_igual(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app import config
+    from app.main import app
+
+    monkeypatch.setattr(config, "RAG_PRECARGAR", False)
+    with TestClient(app) as cliente:
+        assert cliente.get("/health").status_code == 200
+    assert b._en_marcha is None

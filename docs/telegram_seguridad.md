@@ -65,8 +65,8 @@ Lo que se protege, en orden:
 
 | # | Regla | Cómo se cumple | Estado |
 |---|---|---|---|
-| 5.1 | **Sin token, no hay bot.** La API funciona igual que antes. | El hilo solo arranca si `TELEGRAM_BOT_TOKEN` no está vacío. | ✅ config (2) · ⏳ arranque (6) |
-| 5.2 | **Un solo proceso por token.** Dos pollers se reparten los mensajes y Telegram responde 409. | Un hilo por API; en desarrollo, un bot por integrante. Ante un 409 se registra un aviso claro. | ✅ aviso (4) · ⏳ un hilo por API (6) |
+| 5.1 | **Sin token, no hay bot.** La API funciona igual que antes. | `arrancar()` solo levanta el hilo si `TELEGRAM_BOT_TOKEN` no está vacío; `run.bat` muestra si el bot está activo y si tiene lista de permitidos. Los tests vacían el token (`conftest.py`) para no salir nunca a la red con el `.env` de quien los corre. | ✅ (2, 6) |
+| 5.2 | **Un solo proceso por token.** Dos pollers se reparten los mensajes y Telegram responde 409. | `arrancar()` no levanta un segundo bot en el mismo proceso; `run.bat` usa un solo worker. En desarrollo, un bot por integrante. Ante un 409 se registra un aviso claro. | ✅ (4, 6) |
 | 5.3 | **No se procesan mensajes viejos.** Telegram guarda unas 24 h los mensajes recibidos con la API apagada; procesarlos de golpe respondería a sesiones y códigos ya vencidos. | Al arrancar se descartan los pendientes y se llama a `deleteWebhook`. | ✅ (4) |
 | 5.4 | **Un fallo no deja al cliente sin respuesta ni tumba la API.** | `ChatNoDisponible` → mensaje amable. Error de red con Telegram → reintento con espera, sin propagar. | ✅ (3, 4) |
 

@@ -15,8 +15,9 @@ números entre corchetes las citan.
   un 409 avisa que otro proceso usa el mismo token [5.2].
 
 Las respuestas salen en HTML (negrita) y partidas en mensajes de hasta 4096
-caracteres (`app/telegram/formato.py`). El arranque dentro de la API (hilo en el
-`lifespan`) es el paso 6 del plan.
+caracteres (`app/telegram/formato.py`). `arrancar()` lo levanta en un hilo dentro de
+la API (desde el `lifespan` de `app/main.py`), solo si hay `TELEGRAM_BOT_TOKEN` [5.1]
+y una sola vez por proceso [5.2].
 """
 from __future__ import annotations
 
@@ -24,10 +25,12 @@ import logging
 import threading
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
 
+from app import config
 from app.telegram import formato
 from app.telegram.sesiones import Sesiones
 
@@ -80,7 +83,7 @@ class ClienteTelegram:
         try:
             r = self._http.post(self._url + metodo, json=parametros)
             datos = r.json()
-        except (httpx.HTTPError, ValueError) as exc:
+        except (httpx.HTTPError, ValueError, RuntimeError) as exc:  # RuntimeError: cliente cerrado
             # Sin encadenar la excepción: su repr incluye la URL con el token [4.2].
             raise ErrorTelegram(metodo, type(exc).__name__) from None
         if not datos.get("ok"):
@@ -243,6 +246,62 @@ class BotTelegram:
                 parar.wait(espera)
                 espera = min(espera * 2, 60.0)
 
-    def detener(self) -> None:
-        self._pool.shutdown(wait=True, cancel_futures=False)
+    def detener(self, esperar: bool = True) -> None:
+        """Cierra el pool y el cliente. Sin `esperar`, se descarta lo que estaba en cola
+        (al apagar la API no tiene sentido retenerla por un turno del modelo)."""
+        self._pool.shutdown(wait=esperar, cancel_futures=not esperar)
         self._cliente.cerrar()
+
+
+# -- arranque dentro de la API ------------------------------------------------------
+
+@dataclass
+class BotEnMarcha:
+    bot: BotTelegram
+    hilo: threading.Thread
+    parar: threading.Event
+
+    def detener(self, espera: float = 2.0) -> None:
+        global _en_marcha
+        self.parar.set()
+        # Cerrar el cliente corta la espera larga de getUpdates; el bucle ve `parar` y sale.
+        self.bot.detener(esperar=False)
+        self.hilo.join(timeout=espera)
+        with _candado_arranque:
+            if _en_marcha is self:
+                _en_marcha = None
+        log.info("telegram.bot_detenido")
+
+
+_en_marcha: BotEnMarcha | None = None
+_candado_arranque = threading.Lock()
+
+
+def arrancar(servicio: Any = None, http: httpx.Client | None = None) -> BotEnMarcha | None:
+    """Levanta el bot en un hilo daemon. None si no hay token [5.1] o si ya está en marcha
+    en este proceso [5.2] (un token admite un solo lector)."""
+    global _en_marcha
+    if not config.TELEGRAM_BOT_TOKEN:
+        log.info("telegram.sin_token: el bot no arranca")
+        return None
+    with _candado_arranque:
+        if _en_marcha is not None:
+            log.warning("telegram.ya_en_marcha: no se arranca un segundo bot en este proceso")
+            return None
+        if servicio is None:
+            from app.agente import obtener_servicio
+
+            servicio = obtener_servicio()
+        bot = BotTelegram(ClienteTelegram(config.TELEGRAM_BOT_TOKEN, http=http), Sesiones(servicio),
+                          permitidos=config.TELEGRAM_USUARIOS_PERMITIDOS, hilos=config.TELEGRAM_HILOS)
+        parar = threading.Event()
+        hilo = threading.Thread(target=bot.ejecutar, args=(parar,), daemon=True, name="telegram-bot")
+        _en_marcha = BotEnMarcha(bot, hilo, parar)
+        hilo.start()
+    if config.TELEGRAM_USUARIOS_PERMITIDOS:
+        log.warning("telegram.bot_activo: solo responde a %s usuario(s) permitido(s)",
+                    len(config.TELEGRAM_USUARIOS_PERMITIDOS))
+    else:
+        log.warning("telegram.bot_activo SIN lista de usuarios permitidos: responde a cualquiera "
+                    "que encuentre el bot (ver TELEGRAM_USUARIOS_PERMITIDOS)")
+    return _en_marcha
