@@ -471,10 +471,14 @@ def fecha_sistema():
     return {"fecha_actual": ejecutar(parametro.obtener_fecha_sistema)}
 
 
-# CRUD de desarrollo: solo con ENTORNO=dev.
+# CRUD de desarrollo y banco de pruebas del RAG: solo con ENTORNO=dev.
 if config.ENTORNO == "dev":
+    from app.api.dev_rag import router as dev_rag_router
+
     app.include_router(dev)
-    log.warning("ENTORNO=dev: CRUD /api/... montado SIN autenticación; no exponer fuera de localhost.")
+    app.include_router(dev_rag_router)
+    log.warning("ENTORNO=dev: CRUD /api/... y /dev/rag montados SIN autenticación; "
+                "no exponer fuera de localhost.")
 else:
     log.info("ENTORNO=%s: CRUD /api/... deshabilitado.", config.ENTORNO)
 

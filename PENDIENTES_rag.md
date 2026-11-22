@@ -81,11 +81,16 @@ prometería cosas que el sistema no hace.
       lista", igual que `precio` en `catalogo.json`). Resultado: 107 fragmentos de PDF
       (87 filas) y la columna modo A de las tablas se conserva.
 - [ ] Revisar lo que aún pasa el filtro y es del modo B o interno:
-  - P7 y "Cómo derivas" (01 p3) asignan destinatario por tramo; en modo A va al ejecutivo.
+  - P7, "Cómo derivas" (01 p3) y `catalogo.json` → `agente.politicas.derivacion` asignan
+    destinatario por tramo; en modo A va al ejecutivo.
   - Tabla de herramientas del 01 (p5) y nombres como `registrar_caso`: instrucción interna.
   - Huérfanos menores: "P6." sin texto, "Si no sabes cuál es, actúa en modo A.".
   - El PDF 01 es en buena parte instrucción para el agente: encaja mejor en el prompt del
     sistema que en el RAG.
+- [x] Banco de pruebas (solo `ENTORNO=dev`): página `/dev/rag` y endpoints
+      `/dev/rag/buscar` y `/dev/rag/info` (`app/api/dev_rag.py`, `app/static/rag.html`).
+      Muestra puntajes, qué pasa el umbral y qué llegaría al prompt; el historial se
+      copia como CSV para calibrar.
 - [ ] Calibrar `RAG_UMBRAL` con el set de evaluación. Medición con granite y filas de
       tabla: relevantes 0,83-0,96, ajenas 0,74-0,81 (por defecto 0,82; el 0,35 de sesion7
       no filtra). El umbral solo no separa lo fuera de tema: lo cubre el prompt.
