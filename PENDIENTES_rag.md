@@ -102,8 +102,10 @@ prometería cosas que el sistema no hace.
       de traza con tokens. Modelo: DeepSeek por `LLM_*`.
 - [x] Prueba por casuística lista: `python -X utf8 -m scripts.probar_chat` (11 casos con
       los datos de `db/casos_datos.json`: herramienta usada, datos citados, frases prohibidas).
-- [ ] Correrla con DeepSeek real (la clave del `.env` dio 401; se pidió una nueva) y ajustar
-      el prompt con lo que falle.
+- [x] Corrida con DeepSeek real (`deepseek-flash`, 2026-11-22): 11/11 casos OK, 22 llamadas,
+      86 % de la entrada desde caché, US$ 0,004 el recorrido. Ajustes al prompt: no mencionar
+      el campo `aviso`, registrar una sola vez, no decir qué factura pagar ni que se anulará
+      (agregado también a las frases prohibidas del script).
 - [ ] Evaluación: una pregunta por casuística con los datos sembrados
       (ejemplos en `docs/casuisticas_api.md`), comprobando herramienta llamada,
       monto citado y frases prohibidas.

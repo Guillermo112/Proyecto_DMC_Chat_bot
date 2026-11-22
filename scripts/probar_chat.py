@@ -38,8 +38,10 @@ from app import config  # noqa: E402
 CASOS_JSON = config.RAIZ_PROYECTO / "db" / "casos_datos.json"
 
 # Lo que el agente nunca debe decir en el modo A (PDF 01, reglas de oro 6; casuísticas).
-PROHIBIDAS = ("te devolveremos", "se anulará", "se anulara", "te lo aprueban", "ya apliqué",
-              "apliqué la nota", "emití la nota", "nota de crédito aplicada", "te aplico un descuento")
+PROHIBIDAS = ("te devolveremos", "se anulará", "se anulara", "se anule", "te lo aprueban",
+              "ya apliqué", "apliqué la nota", "emití la nota", "nota de crédito aplicada",
+              "te aplico un descuento", "corresponde pagar", "solo una para el pago", "no pagues",
+              "no la pagues", "el aviso", "no se pudo enviar")
 
 # Tarifa de deepseek-flash por millón de tokens, horario off-peak (2026-11-22; en pico, el doble).
 PRECIO = {"entrada": 0.15, "cache": 0.003, "salida": 0.6}
