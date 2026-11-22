@@ -88,8 +88,10 @@ guarda HMAC-SHA256(`AUTH_SECRET`, código) en `verificacion`; sin `AUTH_SECRET`
 Por HTTP (`app/auth/rutas.py`):
 
 - `POST /auth/solicitar-codigo` `{"ruc": "..."}` → `{"id_verificacion", "mensaje"}`.
-  La respuesta es la misma exista o no el RUC. 422 si el RUC no tiene 11 dígitos,
-  429 si se pide otro código antes de tiempo o si la IP superó
+  La respuesta es la misma (200, id nuevo, mismo mensaje) exista o no el RUC,
+  también al pedir otro código antes de `OTP_ESPERA_REENVIO_SEG`: en ese caso no se
+  envía correo y el código que ya llegó sirve con el **último** id devuelto (hereda
+  intentos y expiración). 422 si el RUC no tiene 11 dígitos, 429 si la IP superó
   `AUTH_MAX_SOLICITUDES_POR_IP` solicitudes (5) en `AUTH_VENTANA_SOLICITUDES_SEG`
   segundos (900), con cabecera `Retry-After`; 503 si falla el correo. El límite
   por IP vive en memoria: con varios workers de uvicorn cada uno cuenta por su lado.

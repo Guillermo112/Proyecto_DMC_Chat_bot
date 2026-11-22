@@ -60,12 +60,22 @@ def solicitar_codigo(ruc: str, db_path: Path | None = None) -> tuple[int, str | 
 
     Devuelve (id de verificación, correo enmascarado). Si el RUC no existe no se
     envía nada: se registra el intento ('bloqueado') y el correo es None.
-    ValueError si el RUC es inválido o si se pide otro código antes de
-    OTP_ESPERA_REENVIO_SEG.
+
+    Reenvío antes de OTP_ESPERA_REENVIO_SEG: no se envía otro correo ni se genera
+    otro código. Se crea una fila que continúa la pendiente (mismo código, misma
+    expiración, mismos intentos y misma fecha de envío) y se devuelve su id; la
+    anterior queda 'expirado'. Así la respuesta no se distingue de la de un RUC
+    inexistente (siempre un id nuevo) y el código que ya llegó sigue sirviendo con
+    el id devuelto, sin regalar intentos extra.
+
+    ValueError si el RUC es inválido. RuntimeError si falta AUTH_SECRET.
     """
     ruc = ruc.strip() if isinstance(ruc, str) else ""
     if len(ruc) != 11 or not ruc.isdigit():
         raise ValueError("El RUC debe tener 11 dígitos")
+    # Se valida antes de mirar la base: sin secreto fallan igual los RUC existentes
+    # y los inexistentes (si no, el error revelaría cuáles existen).
+    obtener_secreto()
     ahora = datetime.now()
     with get_connection(db_path, escritura=True) as con:
         with con:  # una transacción: si el envío falla, no queda el registro
@@ -83,13 +93,25 @@ def solicitar_codigo(ruc: str, db_path: Path | None = None) -> tuple[int, str | 
 
             id_cliente = cliente["id_cliente"]
             ultimo = con.execute(
-                "SELECT fecha_envio FROM verificacion WHERE id_cliente = ? AND estado = 'pendiente'"
+                "SELECT id_verificacion, codigo_hash, fecha_envio, fecha_expira, intentos"
+                " FROM verificacion WHERE id_cliente = ? AND estado = 'pendiente'"
                 " ORDER BY id_verificacion DESC LIMIT 1",
                 (id_cliente,),
             ).fetchone()
             espera = timedelta(seconds=config.OTP_ESPERA_REENVIO_SEG)
             if ultimo and ahora - datetime.fromisoformat(ultimo["fecha_envio"]) < espera:
-                raise ValueError("Ya se envió un código hace poco; espera un momento antes de pedir otro")
+                # Reenvío prematuro: continuar la verificación pendiente sin enviar nada.
+                con.execute(
+                    "UPDATE verificacion SET estado = 'expirado' WHERE id_verificacion = ?",
+                    (ultimo["id_verificacion"],),
+                )
+                cur = con.execute(
+                    "INSERT INTO verificacion (id_cliente, ruc_ingresado, codigo_hash, fecha_envio,"
+                    " fecha_expira, intentos, estado) VALUES (?, ?, ?, ?, ?, ?, 'pendiente')",
+                    (id_cliente, ruc, ultimo["codigo_hash"], ultimo["fecha_envio"],
+                     ultimo["fecha_expira"], ultimo["intentos"]),
+                )
+                return cur.lastrowid, enmascarar(cliente["correo_facturacion"])
 
             # Un código nuevo invalida los anteriores.
             con.execute(

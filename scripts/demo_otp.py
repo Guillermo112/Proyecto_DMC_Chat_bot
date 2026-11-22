@@ -13,6 +13,7 @@ except (ValueError, RuntimeError) as exc:
     raise SystemExit(f"No se pudo enviar: {exc}")
 if correo:
     print(f"Enviamos un código a {correo}. Revisa tu bandeja (y spam).")
+    print(f"(Si pediste otro hace menos de {config.OTP_ESPERA_REENVIO_SEG} s, no se envía uno nuevo: usa el que ya llegó.)")
 else:
     print("El RUC no está registrado.")
     raise SystemExit(1)

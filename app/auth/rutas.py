@@ -54,14 +54,13 @@ class RespuestaSesion(BaseModel):
     # Límite por IP (AUTH_MAX_SOLICITUDES_POR_IP en AUTH_VENTANA_SOLICITUDES_SEG).
     # Cuenta también las peticiones mal formadas.
     dependencies=[Depends(limitar_solicitudes)],
-    responses={429: {"description": "Límite por IP o reenvío antes de tiempo"}},
+    responses={429: {"description": "Límite de solicitudes por IP"}},
 )
 def solicitar_codigo(body: SolicitudCodigo):
+    # Misma respuesta (200, id nuevo, mismo mensaje) para RUC existente, inexistente
+    # o reenvío prematuro: nada de lo que se devuelve revela quién es cliente.
     try:
         id_verificacion, _ = otp.solicitar_codigo(body.ruc)
-    except ValueError as exc:
-        # El formato del RUC ya lo valida el esquema: aquí solo queda el reenvío prematuro.
-        raise HTTPException(status_code=429, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 - SMTP caído o no configurado
         log.exception("No se pudo enviar el código OTP")
         raise HTTPException(status_code=503, detail="No se pudo enviar el código; intenta más tarde") from exc

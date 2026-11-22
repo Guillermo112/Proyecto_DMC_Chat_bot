@@ -102,11 +102,54 @@ def test_codigo_vencido(db, monkeypatch):
     assert _estado(copia, id_v)[0] == "expirado"
 
 
-def test_espera_entre_reenvios_y_codigo_nuevo_invalida_el_anterior(db, monkeypatch):
+def test_reenvio_prematuro_continua_la_verificacion_sin_enviar(db):
     copia, enviados, ruc = db
     primero, _ = otp.solicitar_codigo(ruc, db_path=copia)
-    with pytest.raises(ValueError):
-        otp.solicitar_codigo(ruc, db_path=copia)
+    malo = "000000" if _codigo(enviados) != "000000" else "111111"
+    assert otp.verificar_codigo(primero, malo, db_path=copia) is None  # gasta 1 intento
+
+    segundo, correo = otp.solicitar_codigo(ruc, db_path=copia)
+    assert segundo != primero and correo is not None
+    assert len(enviados) == 1  # no se envió otro correo
+    assert _estado(copia, primero)[0] == "expirado"
+    # Hereda los intentos: reenviar no regala oportunidades.
+    assert _estado(copia, segundo) == ("pendiente", 1)
+    with sqlite3.connect(copia) as con:
+        filas = con.execute(
+            "SELECT codigo_hash, fecha_envio, fecha_expira FROM verificacion WHERE id_verificacion IN (?, ?)"
+            " ORDER BY id_verificacion", (primero, segundo)).fetchall()
+    assert filas[0] == filas[1]  # mismo código, misma fecha de envío y expiración
+    # El código que ya llegó sirve con el id nuevo, no con el viejo.
+    assert otp.verificar_codigo(primero, _codigo(enviados), db_path=copia) is None
+    assert otp.verificar_codigo(segundo, _codigo(enviados), db_path=copia) == 1
+
+
+def test_reenvio_prematuro_no_reinicia_la_espera(db):
+    """La fecha de envío se hereda: insistir no alarga la espera para pedir otro código."""
+    copia, enviados, ruc = db
+    otp.solicitar_codigo(ruc, db_path=copia)
+    with sqlite3.connect(copia) as con:  # simular que el envío fue hace 2 minutos
+        con.execute("UPDATE verificacion SET fecha_envio = datetime(fecha_envio, '-120 seconds')"
+                    " WHERE estado = 'pendiente'")
+    otp.solicitar_codigo(ruc, db_path=copia)
+    assert len(enviados) == 2  # pasó la espera: código nuevo
+
+
+def test_reenvio_prematuro_no_supera_el_maximo_de_intentos(db):
+    copia, enviados, ruc = db
+    id_v, _ = otp.solicitar_codigo(ruc, db_path=copia)
+    malo = "000000" if _codigo(enviados) != "000000" else "111111"
+    for _ in range(config.OTP_MAX_INTENTOS - 1):
+        otp.verificar_codigo(id_v, malo, db_path=copia)
+        id_v, _ = otp.solicitar_codigo(ruc, db_path=copia)
+    otp.verificar_codigo(id_v, malo, db_path=copia)
+    assert _estado(copia, id_v) == ("bloqueado", config.OTP_MAX_INTENTOS)
+    assert otp.verificar_codigo(id_v, _codigo(enviados), db_path=copia) is None
+
+
+def test_codigo_nuevo_invalida_el_anterior(db, monkeypatch):
+    copia, enviados, ruc = db
+    primero, _ = otp.solicitar_codigo(ruc, db_path=copia)
     monkeypatch.setattr(config, "OTP_ESPERA_REENVIO_SEG", 0)
     segundo, _ = otp.solicitar_codigo(ruc, db_path=copia)
     assert _estado(copia, primero)[0] == "expirado"
