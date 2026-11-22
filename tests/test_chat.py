@@ -114,6 +114,41 @@ def test_rag_caido_no_tumba_el_chat():
 
 
 # -- API -------------------------------------------------------------------------
+def test_canal_del_turno_llega_al_caso(indice, tmp_path, monkeypatch):
+    """El turno del bot registra el caso con canal telegram; la web sigue con web."""
+    import shutil
+    import sqlite3
+
+    copia = tmp_path / "anticipa.db"
+    shutil.copy(config.DB_PATH, copia)
+    monkeypatch.setattr(config, "DB_PATH", copia)
+    monkeypatch.setattr(config, "NOTIFICAR_DERIVACIONES", False)
+    servicio = ServicioChat(router=RouterFalso(
+        _herramienta("registrar_caso", {"tipo": "factura_duplicada", "numero_factura": "F001-000255",
+                                        "canal": "web"}),
+        _texto("Registré tu caso."),
+    ), indice=indice)
+
+    turno = servicio.responder(1, "123456789", "Me llegaron dos facturas iguales", canal="telegram")
+
+    [h] = turno.herramientas
+    assert h["ok"], h["resultado"]
+    canal, = sqlite3.connect(copia).execute("SELECT canal FROM caso ORDER BY id_caso DESC LIMIT 1").fetchone()
+    assert canal == "telegram"
+
+
+def test_responder_usa_web_por_defecto(indice):
+    recibidos = []
+
+    def fabrica(cliente_id, mensaje, canal):
+        recibidos.append(canal)
+        from app.tools import Herramientas
+        return Herramientas(cliente_id, mensaje, canal=canal)
+
+    ServicioChat(router=RouterFalso(_texto("hola")), indice=indice, herramientas=fabrica).responder(1, "c1", "hola")
+    assert recibidos == ["web"]
+
+
 @pytest.fixture
 def cliente_api(indice):
     def _usar(router):

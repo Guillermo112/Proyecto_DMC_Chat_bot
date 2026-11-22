@@ -8,10 +8,10 @@ Dos decisiones por costo:
 2. **Tope de vueltas** (`CHAT_MAX_VUELTAS`): cada herramienta que el modelo pide
    cuesta una llamada más; el tope evita que un error encadene llamadas.
 
-El `cliente_id` llega del token de sesión (lo pone la ruta) y se ata a las
-herramientas: el modelo nunca lo elige. El historial guarda solo los textos del
-usuario y del asistente (no los resultados de herramientas ni el contexto), y vive
-en memoria: se pierde al reiniciar la API.
+El `cliente_id` llega de la sesión (el token en la web, la identificación del bot en
+Telegram) y se ata a las herramientas junto con el canal: el modelo no elige ninguno.
+El historial guarda solo los textos del usuario y del asistente (no los resultados de
+herramientas ni el contexto), y vive en memoria: se pierde al reiniciar la API.
 """
 from __future__ import annotations
 
@@ -27,6 +27,7 @@ from app import config
 from app.agente.prompt import SYSTEM_PROMPT
 from app.data import facturacion
 from app.llm import SinProveedores, crear_router
+from app.schemas.casos import Canal
 from app.tools import ESQUEMAS, Herramientas
 
 log = logging.getLogger(__name__)
@@ -88,7 +89,7 @@ class ServicioChat:
     """Un servicio por proceso; las conversaciones se separan por cliente y por id."""
 
     def __init__(self, router: Any = None, indice: Any = None,
-                 herramientas: Callable[[int, str], Herramientas] = Herramientas) -> None:
+                 herramientas: Callable[..., Herramientas] = Herramientas) -> None:
         self._router = router
         self._indice = indice
         self._herramientas = herramientas
@@ -183,7 +184,9 @@ class ServicioChat:
         return texto, documentos, None
 
     # -- turno ------------------------------------------------------------------
-    def responder(self, cliente_id: int, conversacion_id: str, mensaje: str) -> Turno:
+    def responder(self, cliente_id: int, conversacion_id: str, mensaje: str,
+                  canal: Canal = "web") -> Turno:
+        """Un turno. `canal` es por dónde llegó el mensaje: va a los casos que se registren."""
         inicio = time.perf_counter()
         historial = self._historial((cliente_id, conversacion_id))
         contexto, documentos, aviso = self._contexto(mensaje)
@@ -196,7 +199,7 @@ class ServicioChat:
         mensajes.append({"role": "user", "content": mensaje})
 
         turno = Turno(texto="", documentos=documentos, aviso=aviso)
-        herramientas = self._herramientas(cliente_id, mensaje)
+        herramientas = self._herramientas(cliente_id, mensaje, canal=canal)
         cache: dict[str, dict[str, Any]] = {}
         try:
             texto = self._bucle(mensajes, herramientas, cache, turno)
@@ -207,8 +210,8 @@ class ServicioChat:
         turno.ms = int((time.perf_counter() - inicio) * 1000)
         historial.append({"role": "user", "content": mensaje})
         historial.append({"role": "assistant", "content": texto})
-        log.info("chat.turno cliente=%s herramientas=%s documentos=%s llamadas=%s tokens=%s ms=%s",
-                 cliente_id, [h["nombre"] for h in turno.herramientas], len(documentos),
+        log.info("chat.turno canal=%s cliente=%s herramientas=%s documentos=%s llamadas=%s tokens=%s ms=%s",
+                 canal, cliente_id, [h["nombre"] for h in turno.herramientas], len(documentos),
                  turno.llamadas, turno.tokens, turno.ms)
         return turno
 

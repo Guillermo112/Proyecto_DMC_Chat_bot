@@ -63,6 +63,23 @@ def test_registrar_caso_usa_canal_web_y_palabras_del_turno(base):
     assert canal == "web"
 
 
+def test_registrar_caso_usa_el_canal_de_la_conversacion(base):
+    """El canal lo pone el código (el bot dice telegram); el que mande el modelo se ignora."""
+    h = Herramientas(1, palabras_cliente="Me llegaron dos facturas iguales", canal="telegram")
+    r = h.ejecutar("registrar_caso", {"tipo": "factura_duplicada", "numero_factura": "F001-000255",
+                                      "canal": "web"})
+    assert r["numero_caso"]
+    con = sqlite3.connect(base)
+    canal, = con.execute("SELECT canal FROM caso ORDER BY id_caso DESC LIMIT 1").fetchone()
+    assert canal == "telegram"
+
+
+@pytest.mark.parametrize("canal", ["correo", "manual", "", "TELEGRAM"])
+def test_canal_invalido(canal):
+    with pytest.raises(ValueError):
+        Herramientas(1, canal=canal)
+
+
 def test_registrar_caso_sin_anomalia_explica_el_error(base):
     r = Herramientas(11).ejecutar("registrar_caso", {"tipo": "factura_duplicada"})
     assert "error" in r
