@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.auth import otp
+from app.auth.limite import limitar_solicitudes
 from app.auth.sesion import cliente_actual, emitir_token
 
 log = logging.getLogger(__name__)
@@ -47,7 +48,14 @@ class RespuestaSesion(BaseModel):
     cliente_id: int
 
 
-@router.post("/solicitar-codigo", response_model=RespuestaSolicitud)
+@router.post(
+    "/solicitar-codigo",
+    response_model=RespuestaSolicitud,
+    # Límite por IP (AUTH_MAX_SOLICITUDES_POR_IP en AUTH_VENTANA_SOLICITUDES_SEG).
+    # Cuenta también las peticiones mal formadas.
+    dependencies=[Depends(limitar_solicitudes)],
+    responses={429: {"description": "Límite por IP o reenvío antes de tiempo"}},
+)
 def solicitar_codigo(body: SolicitudCodigo):
     try:
         id_verificacion, _ = otp.solicitar_codigo(body.ruc)

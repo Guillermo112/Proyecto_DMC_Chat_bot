@@ -39,3 +39,7 @@ AUTH_MINUTOS_SESION = int(os.getenv("AUTH_MINUTOS_SESION", "30"))
 # Entorno: solo "dev" monta el CRUD de desarrollo /api/... (sin autenticación).
 # Sin definir = "prod": si falta en el .env, el CRUD queda oculto (seguro por defecto).
 ENTORNO = (os.getenv("ENTORNO") or "prod").strip().lower()  # vacío = sin definir
+
+# Límite de peticiones a /auth/solicitar-codigo por IP (ventana deslizante).
+AUTH_MAX_SOLICITUDES_POR_IP = int(os.getenv("AUTH_MAX_SOLICITUDES_POR_IP", "5"))
+AUTH_VENTANA_SOLICITUDES_SEG = int(os.getenv("AUTH_VENTANA_SOLICITUDES_SEG", "900"))

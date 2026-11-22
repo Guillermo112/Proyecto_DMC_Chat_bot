@@ -61,6 +61,8 @@ Si una variable también está definida en el sistema, gana la del sistema.
 | `ENTORNO` | `prod` | `dev` monta el CRUD `/api/...` sin autenticación; otro valor o vacío lo oculta |
 | `AUTH_SECRET` | — | Clave del HMAC del OTP y de la firma del token (mínimo 32 caracteres) |
 | `AUTH_MINUTOS_SESION` | `30` | Duración del token de sesión |
+| `AUTH_MAX_SOLICITUDES_POR_IP` | `5` | Solicitudes de código por IP en la ventana |
+| `AUTH_VENTANA_SOLICITUDES_SEG` | `900` | Ventana del límite por IP (segundos) |
 
 ## Ejecutar
 
@@ -87,7 +89,10 @@ Por HTTP (`app/auth/rutas.py`):
 
 - `POST /auth/solicitar-codigo` `{"ruc": "..."}` → `{"id_verificacion", "mensaje"}`.
   La respuesta es la misma exista o no el RUC. 422 si el RUC no tiene 11 dígitos,
-  429 si se pide otro código antes de tiempo, 503 si falla el correo.
+  429 si se pide otro código antes de tiempo o si la IP superó
+  `AUTH_MAX_SOLICITUDES_POR_IP` solicitudes (5) en `AUTH_VENTANA_SOLICITUDES_SEG`
+  segundos (900), con cabecera `Retry-After`; 503 si falla el correo. El límite
+  por IP vive en memoria: con varios workers de uvicorn cada uno cuenta por su lado.
 - `POST /auth/verificar-codigo` `{"id_verificacion", "codigo"}` →
   `{"verificado": true, "cliente_id", "access_token", "token_type": "bearer", "expira_en"}`
   o 401. `access_token` es un JWT (HS256, firmado con `AUTH_SECRET`) que vence en
