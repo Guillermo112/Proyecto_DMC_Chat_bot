@@ -59,18 +59,14 @@ paso se implementan); al terminar un paso, marcarlas ✅ allí.
    sesiones en memoria y `borrar_mensaje` para el mensaje del código. Los comandos
    (`/start`, `/nuevo`, `/salir`, ayuda) se resolvieron aquí: son lógica, no transporte.
    Tests: `tests/test_telegram_sesiones.py` (incluye uno con el OTP real y la base copiada).
-4. [ ] **Cliente de Telegram y despacho** (`app/telegram/bot.py`):
-   - Bucle `getUpdates` con `timeout` largo y `offset`. Al arrancar descarta los
-     pendientes (Telegram los guarda ~24 h) y llama a `deleteWebhook`.
-   - Comandos: ya resueltos en `Sesiones` (paso 3); el bot solo pasa el texto.
-   - Solo texto: a fotos, audios o stickers responde que solo atiende texto.
-   - Pool de `TELEGRAM_HILOS` hilos, **en orden por chat** (el `deque` del historial no
-     tiene candado: dos mensajes del mismo chat no pueden procesarse a la vez).
-   - `sendChatAction: typing` mientras responde.
-   - `ChatNoDisponible` → mensaje amable; nunca quedarse callado.
-   - Borra el mensaje con el código (`deleteMessage`) tras verificarlo. El código nunca
-     va a los logs.
-   - Errores de red de Telegram: reintento con espera, sin tumbar la API.
+4. [x] **Cliente de Telegram y despacho** (hecho): `app/telegram/bot.py`.
+   `ClienteTelegram` (POST con JSON sobre `httpx`; errores sin el token) y `BotTelegram`:
+   `deleteWebhook(drop_pending_updates)` al arrancar, `getUpdates` con `offset`, filtros
+   (solo privados, lista de permitidos, solo texto), una cola por chat atendida por un
+   hilo a la vez en un pool de `TELEGRAM_HILOS` (tope de 10 pendientes por chat),
+   `typing`, borrado del código, y un bucle que reintenta con espera creciente (respeta
+   `retry_after`), avisa el 409 y se detiene ante un 401. Los textos salen planos hasta
+   el paso 5. Tests: `tests/test_telegram_bot.py` con `httpx.MockTransport`.
 5. [ ] **Formato de salida:** `parse_mode=HTML`, escapando el texto y convirtiendo
    `**negrita**` a `<b>` (como `formatear()` en `app/static/chat.html`). Cortar en
    mensajes de hasta 4096 caracteres.
