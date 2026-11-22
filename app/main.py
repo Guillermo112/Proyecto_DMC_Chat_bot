@@ -25,6 +25,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Query, Path as PathParam
 from fastapi.responses import JSONResponse
 from sqlite3 import IntegrityError, OperationalError, DatabaseError
 
+from app.auth.rutas import router as auth_router
 from app.data import get_connection
 from app.data.anticipa_crud_por_entidad import (
     PersonalCRUD,
@@ -38,7 +39,6 @@ from app.data.anticipa_crud_por_entidad import (
     SolicitudCRUD,
     CasoCRUD,
     AjusteCRUD,
-    VerificacionCRUD,
     InteraccionLogCRUD,
     PoliticaTramoCRUD,
     ParametroCRUD,
@@ -49,6 +49,8 @@ app = FastAPI(
     description="Endpoints CRUD y operaciones de negocio para probar el chatbot Anticipa.",
     version="1.0.0",
 )
+
+app.include_router(auth_router)
 
 
 @app.get("/health", tags=["Sistema"])
@@ -96,7 +98,6 @@ averia = AveriaCRUD()
 solicitud = SolicitudCRUD()
 caso = CasoCRUD()
 ajuste = AjusteCRUD()
-verificacion = VerificacionCRUD()
 interaccion_log = InteraccionLogCRUD()
 politica_tramo = PoliticaTramoCRUD()
 parametro = ParametroCRUD()
@@ -179,7 +180,7 @@ registrar_crud("/api/averias", "Averías", averia)
 registrar_crud("/api/solicitudes", "Solicitudes", solicitud)
 registrar_crud("/api/casos", "Casos", caso)
 registrar_crud("/api/ajustes", "Ajustes", ajuste)
-registrar_crud("/api/verificaciones", "Verificaciones", verificacion)
+# "verificacion" no se expone aquí: solo se maneja vía /auth (app/auth/rutas.py).
 registrar_crud("/api/interacciones", "Interacciones", interaccion_log)
 registrar_crud("/api/politicas-tramo", "Políticas por tramo", politica_tramo)
 registrar_crud("/api/parametros", "Parámetros", parametro)
@@ -201,7 +202,7 @@ def buscar_registros(
         "servicios": servicio, "facturas": factura,
         "factura-lineas": factura_linea, "consumos": consumo,
         "averias": averia, "solicitudes": solicitud, "casos": caso,
-        "ajustes": ajuste, "verificaciones": verificacion,
+        "ajustes": ajuste,
         "interacciones": interaccion_log, "politicas-tramo": politica_tramo,
         "parametros": parametro,
     }
@@ -424,40 +425,6 @@ def aplicar_ajuste(ajuste_id: int, body: dict[str, str]):
     if not ok:
         raise HTTPException(404, "Ajuste no encontrado")
     return {"aplicado": True, "fecha_aplicacion": fecha}
-
-
-# VerificacionCRUD
-@app.get("/api/verificaciones/ultima/{ruc}", tags=["Verificaciones - métodos adicionales"])
-def ultima_verificacion(ruc: str):
-    result = ejecutar(verificacion.obtener_ultima_por_ruc, ruc)
-    if result is None:
-        raise HTTPException(404, "Verificación no encontrada")
-    return result
-
-
-@app.patch("/api/verificaciones/{verificacion_id}/incrementar-intentos", tags=["Verificaciones - métodos adicionales"])
-def incrementar_intentos(verificacion_id: int):
-    ok = ejecutar(verificacion.incrementar_intentos, verificacion_id)
-    if not ok:
-        raise HTTPException(404, "Verificación no encontrada")
-    return {"actualizado": True}
-
-
-@app.patch("/api/verificaciones/{verificacion_id}/bloquear", tags=["Verificaciones - métodos adicionales"])
-def bloquear_verificacion(verificacion_id: int):
-    ok = ejecutar(verificacion.bloquear, verificacion_id)
-    if not ok:
-        raise HTTPException(404, "Verificación no encontrada")
-    return {"bloqueada": True}
-
-
-@app.get("/api/verificaciones/{verificacion_id}/vigencia", tags=["Verificaciones - métodos adicionales"])
-def validar_vigencia(
-    verificacion_id: int,
-    ahora: str = Query(..., description="Fecha/hora ISO, por ejemplo 2026-12-05T10:00:00"),
-):
-    vigente = ejecutar(verificacion.validar_vigencia, verificacion_id, ahora)
-    return {"vigente": vigente}
 
 
 # InteraccionLogCRUD

@@ -8,7 +8,7 @@ LangChain usando las funciones de `app/data` como herramientas.
 
 ```
 app/
-  main.py      # FastAPI (por ahora solo /health)
+  main.py      # FastAPI: /health, /auth y CRUD de desarrollo (/api/...)
   config.py    # settings desde variables de entorno
   data/        # acceso a SQLite (solo lectura, filtrado por cliente)
   schemas/     # modelos Pydantic
@@ -63,7 +63,7 @@ Si una variable también está definida en el sistema, gana la del sistema.
 uvicorn app.main:app --reload
 ```
 
-`GET http://127.0.0.1:8000/health` → `{"status": "ok", "db": "ok"}`
+`GET http://127.0.0.1:8000/health` → `{"status": "OK", "db": "OK"}`
 
 ```bash
 pytest -q
@@ -75,7 +75,18 @@ pytest -q
 registrado del cliente (vence en 10 min, se espera 60 s entre envíos) y
 devuelve `(id_verificacion, correo_enmascarado)`; `verificar_codigo(id, codigo)`
 devuelve el `cliente_id` o `None` (3 intentos fallidos = bloqueado). Solo se
-guarda el hash del código en `verificacion`; es lo único que escribe en la base.
+guarda el hash del código en `verificacion`.
+
+Por HTTP (`app/auth/rutas.py`):
+
+- `POST /auth/solicitar-codigo` `{"ruc": "..."}` → `{"id_verificacion", "mensaje"}`.
+  La respuesta es la misma exista o no el RUC. 422 si el RUC no tiene 11 dígitos,
+  429 si se pide otro código antes de tiempo, 503 si falla el correo.
+- `POST /auth/verificar-codigo` `{"id_verificacion", "codigo"}` →
+  `{"verificado": true, "cliente_id"}` o 401.
+
+La tabla `verificacion` no está en el CRUD de `/api/...`: solo se toca vía `/auth`.
+Aún no se emite token de sesión tras verificar.
 
 Prueba en vivo:
 
