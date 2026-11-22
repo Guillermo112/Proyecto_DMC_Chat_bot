@@ -34,11 +34,10 @@ if errorlevel 1 (
 )
 echo Base creada. Validaciones en verde ^(detalle en db\generar_datos.log^).
 echo.
-echo Clientes de prueba para el OTP ^(el codigo llega al correo de cada uno^):
-"%VPY%" -c "import sqlite3; c=sqlite3.connect('file:db/anticipa.db?mode=ro', uri=True); [print(f'  cliente {i:>2}  RUC {r}  ->  {m}') for i, r, m in c.execute('SELECT id_cliente, ruc, correo_facturacion FROM cliente WHERE id_cliente <= 13 ORDER BY id_cliente')]"
+echo Clientes de prueba para el OTP ^(el codigo llega al correo de cada uno^).
+echo Para verlos de nuevo sin regenerar: clientes_prueba.bat
 echo.
-echo Los que terminan en .example no reciben correo: pon tu correo en tu slot
-echo CORREO_PRUEBA_n del .env y vuelve a ejecutar regenerar_base.bat.
+"%VPY%" -X utf8 -m scripts.clientes_prueba
 
 :fin
 if not defined REGENERAR_SIN_CONFIRMAR pause

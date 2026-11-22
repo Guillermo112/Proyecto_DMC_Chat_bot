@@ -59,14 +59,15 @@ Detalle de lo pendiente: [`PENDIENTES_rag.md`](PENDIENTES_rag.md).
 
 ## Los scripts `.bat`
 
-Tres scripts en la raíz, para Windows. Se ejecutan con doble clic o desde una terminal
-en la carpeta del proyecto.
+Cuatro scripts en la raíz, para Windows. Se ejecutan con doble clic o desde una
+terminal en la carpeta del proyecto.
 
 | Script | Objetivo | Cuándo |
 |---|---|---|
 | `install.bat` | Dejar el entorno listo: Python, dependencias, `.env`, secreto, base, índice del RAG y pruebas | La primera vez, y después de un `git pull` que cambie `requirements.txt` |
 | `regenerar_base.bat` | Borrar y volver a crear `db\anticipa.db` con los correos de tu `.env` | Después de poner tu correo en `.env`, y cuando cambie la base en el repositorio |
 | `run.bat` | Levantar la API para probarla | Cada vez que quieras usar la API o el banco de pruebas |
+| `clientes_prueba.bat` | Ver los RUC de prueba, su casuística y a qué correo llega el código | Cuando necesites un RUC para probar (identificación, `/docs`, el chat) |
 
 ### `install.bat`
 
@@ -92,8 +93,8 @@ cuál fue.
 
 Borra `db\anticipa.db` y la crea de nuevo con datos fijos, **usando los correos de
 prueba de tu `.env`**. Pide confirmación porque se pierden los casos que hayas
-registrado al probar. Al terminar, lista los 13 clientes de prueba con su RUC y el
-correo al que les llegará el código.
+registrado al probar. Al terminar, muestra los clientes de prueba (lo mismo que
+`clientes_prueba.bat`).
 
 - `regenerar_base.bat --publico`: ignora tus correos (todos quedan en `.example`).
 - Si `run.bat` está abierto, detenlo antes (`Ctrl+C`): con la base en uso no se puede borrar.
@@ -107,6 +108,53 @@ Levanta la API en `http://127.0.0.1:8000` (o en otro puerto: `run.bat 8001`).
 - Muestra las direcciones útiles: `/docs` (documentación interactiva) y, con
   `ENTORNO=dev`, `/dev/rag` (banco de pruebas del RAG).
 - Se detiene con `Ctrl+C`.
+
+### `clientes_prueba.bat`
+
+Muestra los 13 clientes de prueba, que son los que tienen las casuísticas sembradas.
+Solo lee la base: no cambia nada.
+
+| Comando | Qué hace |
+|---|---|
+| `clientes_prueba.bat` | Los 13 clientes |
+| `clientes_prueba.bat 2` | Solo los de tu slot (1 a 5) |
+| `clientes_prueba.bat copiar 7` | Copia el RUC del cliente 7 al portapapeles, para pegarlo en `/docs` o en `demo_otp` |
+
+Ejemplo (`clientes_prueba.bat 2`):
+
+```
+ #  RUC          Razón social                        Casuística    Slot  Correo
+ 2  99309114170  Distribuidora Pacífico Norte S.A.   CS-02            2  tu.correo@gmail.com
+ 7  99672731778  Logística Rápida del Callao S.A.C.  CS-09            2  tu.correo@gmail.com
+12  99079819331  Seguros Atlántico Perú S.A.         CS-13            2  tu.correo@gmail.com
+
+Casuísticas:
+  CS-02  Servicio dado de baja que se sigue facturando
+  CS-09  Variación fuerte de facturación (explicable)
+  CS-13  Pedido fuera de alcance (renegociar tarifa)
+RUC inexistente para probar CS-12: 99000000001 (...)
+```
+
+| Columna | Significado |
+|---|---|
+| `#` | Número de cliente (`id_cliente`) |
+| `RUC` | El que se escribe para identificarse. **No cambia** al regenerar la base: es el mismo para todo el equipo |
+| `Razón social` | Nombre de la empresa |
+| `Casuística` | Qué situación tiene sembrada (factura duplicada, baja facturada, etc.), para saber qué preguntar. El cliente 11 no tiene ninguna: sirve de control |
+| `Slot` | A qué `CORREO_PRUEBA_n` del `.env` está asociado |
+| `Correo` | A dónde llega el código OTP. `(no recibe)` = correo `.example`: pon tu correo en tu slot y ejecuta `regenerar_base.bat` |
+
+Dos casos especiales, que el script también indica:
+
+- **Cliente 13 (CS-12):** tiene en su historial un intento bloqueado por 3 códigos
+  incorrectos. Ese bloqueo es de aquella verificación: si pides un código nuevo, puede
+  ingresar.
+- **RUC `99000000001`:** no existe. Sirve para comprobar que la respuesta es la misma
+  que con un RUC válido (no se revela qué RUC son clientes) y que no llega correo.
+
+Con doble clic (o desde PowerShell), espera una tecla al final para que la ventana no
+se cierre antes de leerla. Desde PowerShell se escribe con `.\` delante:
+`.\clientes_prueba.bat 2`.
 
 ---
 
@@ -139,7 +187,8 @@ Levanta la API en `http://127.0.0.1:8000` (o en otro puerto: `run.bat 8001`).
 
 4. **Ejecuta `regenerar_base.bat`.** `install.bat` creó la base **antes** de que pusieras
    tu correo, así que tus clientes de prueba todavía tienen correos `.example`. Al
-   terminar verás la lista de clientes con su RUC y su correo: anota los de tu slot.
+   terminar verás los clientes de prueba: los de tu slot deben mostrar tu correo.
+   Para volver a verlos más tarde: `clientes_prueba.bat`.
 
 5. **Ejecuta `run.bat`** y abre en el navegador:
    - `http://127.0.0.1:8000/health` → debe responder `{"status": "OK", "db": "OK"}`.
@@ -150,8 +199,14 @@ Levanta la API en `http://127.0.0.1:8000` (o en otro puerto: `run.bat 8001`).
 6. **(Opcional) Prueba el código OTP** con un RUC de tu slot, en otra terminal:
 
    ```powershell
+   .\clientes_prueba.bat copiar 1
+   ```
+
+   ```powershell
    .venv\Scripts\python -X utf8 -m scripts.demo_otp
    ```
+
+   Pega el RUC cuando lo pida (cambia `1` por un cliente de tu slot).
 
 ---
 
@@ -177,6 +232,7 @@ Levanta la API en `http://127.0.0.1:8000` (o en otro puerto: `run.bat 8001`).
 | Si pasa esto | Haz esto |
 |---|---|
 | Descargaste el proyecto por primera vez | [Primera vez](#primera-vez), pasos 1 a 5 |
+| Necesitas un RUC para probar | `clientes_prueba.bat` (o `clientes_prueba.bat copiar N`) |
 | Pusiste o cambiaste tu correo (`CORREO_PRUEBA_n`) o tu nombre en `.env` | `regenerar_base.bat` |
 | Hiciste `git pull` y cambió `requirements.txt` | `install.bat` (instala solo lo que falta) |
 | Hiciste `git pull` y cambió `db/schema.sql` o `db/generar_datos.py` | `regenerar_base.bat` |
@@ -266,7 +322,7 @@ python -m uvicorn app.main:app       # = run.bat
 ## Estructura del proyecto
 
 ```
-install.bat, run.bat, regenerar_base.bat   # scripts de Windows (ver arriba)
+install.bat, run.bat, regenerar_base.bat, clientes_prueba.bat   # scripts de Windows
 app/
   main.py        # FastAPI: /health, /auth, /mi; con ENTORNO=dev, /api y /dev/rag
   config.py      # configuración desde variables de entorno (.env)
@@ -280,7 +336,7 @@ app/
   tools/         # herramientas del agente (pendiente)
 db/              # schema.sql, generar_datos.py y la base generada (anticipa.db)
 docs/            # PDF de conocimiento y documentación de la capa de datos
-scripts/         # demo_otp.py, preparar_rag.py
+scripts/         # demo_otp.py, preparar_rag.py, clientes_prueba.py
 tests/           # pytest
 catalogo.json    # catálogo de casuísticas, servicios y políticas
 faq.json         # preguntas frecuentes (pendiente de alinear con el modo A)
@@ -324,7 +380,7 @@ escriba el usuario.
 **Probar en vivo:** con tu correo en tu slot y la base regenerada (ver
 [Primera vez](#primera-vez)), ejecuta `.venv\Scripts\python -X utf8 -m scripts.demo_otp`
 e ingresa un RUC de tu slot, p. ej. `99813998698` (cliente 1, slot 1) o `99309114170`
-(cliente 2, slot 2). `regenerar_base.bat` muestra la lista completa.
+(cliente 2, slot 2). La lista completa: `clientes_prueba.bat`.
 
 ### API del cliente autenticado (`/mi/...`)
 

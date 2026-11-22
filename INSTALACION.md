@@ -82,12 +82,26 @@ correo en `CORREO_PRUEBA_n`, y volver a ejecutar `install.bat` no la recrea (ya 
   `db\generar_datos.log` (ignorado por git); solo la muestra si falla.
 - Si la base está en uso (`run.bat` abierto), `generar_datos.py` falla con
   `PermissionError` y el `.bat` lo explica.
-- Al terminar lista los clientes 1 a 13 con RUC y correo, para probar el OTP.
+- Al terminar muestra los clientes de prueba con `scripts/clientes_prueba.py` (el mismo
+  que usa `clientes_prueba.bat`).
+
+## `clientes_prueba.bat`
+
+Envuelve `scripts/clientes_prueba.py`, que lee la base en solo lectura: RUC, razón
+social, casuística (de `db/casos_datos.json` y `catalogo.json`), slot y correo de los
+clientes 1 a 13. Argumentos: un slot (`2`) o `copiar N` (usa `clip` de Windows).
+
+- Los RUC no se escriben en ningún documento: salen siempre de la base, así que no
+  pueden quedar desactualizados. Son fijos porque el generador usa semilla fija y los
+  correos del `.env` se asignan después del sorteo.
+- Pausa al final solo si se abrió con `cmd /c` (doble clic o PowerShell), detectado con
+  `%cmdcmdline%`; desde una consola `cmd` abierta no pausa.
 
 ## Pendiente (para trabajar luego)
 - [x] `install.bat` en la raíz, probado en una copia limpia sin `.venv`, `.env` ni base.
 - [x] `run.bat` que levanta la API usando `.venv`.
 - [x] `regenerar_base.bat`, probado: generación, cancelación y base en uso.
+- [x] `clientes_prueba.bat`, probado: lista, filtro por slot y copiar.
 - [x] README como guía de uso: objetivo, scripts, primera vez y "cuándo hacer qué".
 - [ ] Revisar la redacción de la indicación final y las variables que se piden.
 - [ ] Cuando existan `ENTORNO` y el límite por IP (pasos 4 y 5 de `PENDIENTES_auth.md`),
