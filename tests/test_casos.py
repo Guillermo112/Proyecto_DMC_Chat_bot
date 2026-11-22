@@ -21,9 +21,23 @@ BASE_REAL = config.DB_PATH
 
 @pytest.fixture(autouse=True)
 def base(tmp_path, monkeypatch):
-    """Copia de la base por test; el aviso por correo empieza desactivado."""
+    """Copia de la base por test; el aviso por correo empieza desactivado.
+
+    La base sembrada solo trae casos por correo y telegram. Los de canal `web` salen de
+    probar el chat o la API a mano: se quitan de la copia para que cada test parta de
+    los casos sembrados aunque la base real ya se haya usado.
+    """
     copia = tmp_path / "anticipa.db"
     shutil.copy(BASE_REAL, copia)
+    con = sqlite3.connect(copia)
+    try:
+        web = "SELECT id_caso FROM caso WHERE canal = 'web'"
+        con.execute(f"DELETE FROM interaccion_log WHERE id_caso IN ({web})")
+        con.execute(f"DELETE FROM ajuste WHERE id_caso IN ({web})")
+        con.execute("DELETE FROM caso WHERE canal = 'web'")
+        con.commit()
+    finally:
+        con.close()
     monkeypatch.setattr(config, "DB_PATH", copia)
     monkeypatch.setattr(config, "NOTIFICAR_DERIVACIONES", False)
     monkeypatch.setattr(config, "CORREO_DERIVACIONES", "")
@@ -53,11 +67,18 @@ def _id(numero: str) -> int:
     return int(numero.split("-")[1])
 
 
+def _siguiente() -> str:
+    """Número que tendrá el próximo caso de la copia (no se supone una base recién generada)."""
+    ultimo = _q("SELECT COALESCE(MAX(id_caso), 0) AS n FROM caso")[0]["n"]
+    return f"C-{ultimo + 1:06d}"
+
+
 # ------------------------------------------------------------------ registrar: anomalías
 
 def test_cs01_registra_y_deriva_al_ejecutivo():
+    esperado = _siguiente()
     r = casos.registrar_caso(1, _caso(tipo="factura_duplicada", palabras_cliente="Me llegaron dos facturas de noviembre"))
-    assert r.numero_caso == "C-000019" and not r.ya_existia
+    assert r.numero_caso == esperado and not r.ya_existia
     assert (r.estado, r.monto_discutido, r.aviso) == ("derivado", 185000.0, "no_enviado")
     assert r.fecha_creacion.startswith("2026-12-05 ")  # fecha ficticia, hora real
     [fila] = _q("SELECT c.*, f.numero FROM caso c JOIN factura f USING (id_factura) WHERE id_caso = ?", _id(r.numero_caso))
@@ -283,20 +304,25 @@ def test_listar_casos_del_cliente():
 
 
 def test_la_base_real_no_se_toca():
+    def contar() -> int:
+        con = sqlite3.connect(f"{BASE_REAL.resolve().as_uri()}?mode=ro", uri=True)
+        try:
+            return con.execute("SELECT COUNT(*) FROM caso").fetchone()[0]
+        finally:
+            con.close()
+
+    antes = contar()
     casos.registrar_caso(1, _caso(tipo="factura_duplicada"))
-    con = sqlite3.connect(f"{BASE_REAL.resolve().as_uri()}?mode=ro", uri=True)
-    try:
-        assert con.execute("SELECT COUNT(*) FROM caso").fetchone()[0] == 18
-    finally:
-        con.close()
+    assert contar() == antes
 
 
 # ------------------------------------------------------------------ API
 
 def test_api_201_y_luego_200_con_ya_existia():
     cuerpo = {"tipo": "factura_duplicada", "canal": "telegram", "palabras_cliente": "Dos facturas"}
+    esperado = _siguiente()
     r = api.post("/mi/casos", json=cuerpo, headers=_como(1))
-    assert r.status_code == 201 and r.json()["numero_caso"] == "C-000019"
+    assert r.status_code == 201 and r.json()["numero_caso"] == esperado
     r = api.post("/mi/casos", json=cuerpo, headers=_como(1))
     assert r.status_code == 200 and r.json()["ya_existia"] is True
 
