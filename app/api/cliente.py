@@ -10,20 +10,25 @@ revelar qué números existen.
 
 Al agregar rutas aquí: tomar el cliente con `Depends(cliente_actual)` y nunca
 aceptar un `cliente_id` del usuario. El router ya exige el token para todas.
+
+`POST /mi/casos` es la única ruta que escribe (`app/data/casos.py`).
 """
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
 
 from app.auth.sesion import cliente_actual
-from app.data import facturacion
+from app.data import casos, facturacion
 from app.schemas import (
     AnomaliasCliente,
+    CasoRegistrado,
     Cliente,
     ComparacionPeriodos,
     FacturaDetalle,
+    ListaCasos,
     ListaServicios,
     ListaSolicitudes,
+    NuevoCaso,
     PaginaFacturas,
     ResumenFacturacion,
     SaldoPendiente,
@@ -148,3 +153,38 @@ def mis_solicitudes(
 ):
     """Solicitudes con días transcurridos y si están fuera del plazo de atención (CS-06)."""
     return _400(facturacion.consultar_solicitudes, cliente_id, estado)
+
+
+@router.post(
+    "/casos",
+    response_model=CasoRegistrado,
+    status_code=201,
+    responses={
+        200: {"model": CasoRegistrado, "description": "Ya había un caso abierto equivalente: se devuelve ese"},
+        400: {"description": "Anomalía no detectada o ambigua, o solicitud dentro del plazo"},
+        404: {"description": "Referencia inexistente o de otro cliente"},
+    },
+)
+def registrar_caso(nuevo: NuevoCaso, response: Response, cliente_id: int = Depends(cliente_actual)):
+    """Registra el caso y lo deriva al ejecutivo del cliente (modo A).
+
+    Guarda las palabras del cliente y el aviso en el historial. 201 si se creó;
+    200 con `ya_existia: true` si ya había uno abierto equivalente (un reintento
+    no duplica). Los tipos de anomalía toman la referencia y el monto de
+    `/mi/anomalias`, nunca del cuerpo.
+    """
+    try:
+        caso = casos.registrar_caso(cliente_id, nuevo)
+    except casos.ReferenciaNoEncontrada as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if caso.ya_existia:
+        response.status_code = 200
+    return caso
+
+
+@router.get("/casos", response_model=ListaCasos)
+def mis_casos(cliente_id: int = Depends(cliente_actual)):
+    """Casos del cliente y su estado, del más reciente al más antiguo."""
+    return casos.listar_casos(cliente_id)

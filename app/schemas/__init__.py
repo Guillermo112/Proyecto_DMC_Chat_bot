@@ -1,3 +1,4 @@
+from app.schemas.casos import CasoRegistrado, CasoResumen, ListaCasos, NuevoCaso
 from app.schemas.facturacion import (
     AnomaliasCliente,
     AveriaSlaIncumplido,
@@ -27,6 +28,10 @@ from app.schemas.facturacion import (
 )
 
 __all__ = [
+    "CasoRegistrado",
+    "CasoResumen",
+    "ListaCasos",
+    "NuevoCaso",
     "AnomaliasCliente",
     "AveriaSlaIncumplido",
     "Cliente",

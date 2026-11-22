@@ -29,7 +29,7 @@ Consecuencias en esta capa:
 
 | Regla | Cómo se cumple |
 |---|---|
-| Solo lectura por defecto | `get_connection()` abre `file:<ruta>?mode=ro` con `uri=True`. Cualquier `INSERT/UPDATE/DELETE` lanza `sqlite3.OperationalError`. Solo `app/auth` y el `_run` del CRUD (`anticipa_crud_por_entidad.py`) piden `escritura=True` (`mode=rw`). |
+| Solo lectura por defecto | `get_connection()` abre `file:<ruta>?mode=ro` con `uri=True`. Cualquier `INSERT/UPDATE/DELETE` lanza `sqlite3.OperationalError`. Solo piden `escritura=True` (`mode=rw`): `app/auth`, el `_run` del CRUD de desarrollo (`anticipa_crud_por_entidad.py`) y `registrar_caso` (`app/data/casos.py`), la única escritura del agente: solo inserta casos y mensajes del historial, nunca modifica ni borra. |
 | Consultas parametrizadas | Todo valor externo va como parámetro `?`. Los f-strings solo insertan fragmentos SQL fijos definidos en el código (lista de columnas, condiciones de filtro, marcadores `?`). |
 | Un cliente por consulta | Toda función recibe `cliente_id` y lo aplica en el `WHERE`. Las líneas de factura y los ajustes, que no tienen `id_cliente`, se filtran con un JOIN a `factura`. |
 | Entradas validadas | `cliente_id` debe ser `int` positivo; `estado` debe estar en la lista permitida; las fechas deben ser `datetime.date`. Si no, `ValueError`. |
@@ -220,6 +220,54 @@ Solicitudes del cliente con su antigüedad y si están fuera de plazo.
 - **Uso en el agente:** CS-06 (ejemplo: cliente 10, abierta el 2026-11-14,
   21 días con plazo de 10). Avisar al responsable es escritura y queda para
   "registrar y derivar caso".
+
+### `registrar_caso(cliente_id, nuevo) -> CasoRegistrado` (`app/data/casos.py`)
+
+Registra un caso y lo deriva al ejecutivo del cliente (modo A). Ruta:
+`POST /mi/casos`; uso por casuística en `docs/casuisticas_api.md`.
+
+- **Tablas:** escribe `caso` e `interaccion_log`; lee `cliente`, `personal`,
+  `factura`, `servicio_contratado`, `averia`, `solicitud` y las vistas de detección.
+- **Qué guarda:** `opcion='A'`, `estado='derivado'`, `id_derivado_a` = ejecutivo
+  del cliente, `tramo` NULL (modo B), `sustento` = resumen del agente más el
+  detalle de la anomalía (todas las facturas y periodos). En el historial: las
+  palabras del cliente (rol `cliente`), la derivación y el resultado del aviso
+  (rol `sistema`); en CS-06, también el responsable de la solicitud.
+- **Número de caso:** `C-` + `id_caso` con 6 dígitos (`C-000019`).
+- **Fecha:** la de corte ficticia con la hora real, para que el caso quede en
+  la línea de tiempo de los datos sembrados.
+- **Referencias:** toda referencia dada debe ser del cliente; una ajena o
+  inexistente lanza `ReferenciaNoEncontrada` (404, sin distinguir).
+- **Tipos de anomalía:** busca la anomalía en `detectar_anomalias` (con
+  cualquier referencia que la identifique, o ninguna si es la única de su
+  tipo) y toma de ella la **referencia canónica** (`referencia_anomalia`: la
+  primera factura afectada o la avería) y el **monto** (`monto_observado`).
+  El cuerpo de la petición no puede fijar el monto. Sin anomalía o con varias
+  que coinciden: `ValueError` (400).
+- **Sin duplicados:** dentro de `BEGIN IMMEDIATE` busca un caso abierto
+  (`abierto`, `derivado`, `escalado`) del mismo cliente y tipo con las mismas
+  referencias; sin referencias, con las mismas palabras del cliente. Si existe,
+  lo devuelve con `ya_existia=True` y no escribe nada.
+- **Aviso por correo:** después de confirmar la transacción, para no bloquear
+  la base mientras responde el SMTP. Destinatarios: el ejecutivo y, en CS-06,
+  el responsable de la solicitud (sin repetir si son la misma persona).
+
+  | `NOTIFICAR_DERIVACIONES` | `CORREO_DERIVACIONES` | Resultado |
+  |---|---|---|
+  | desactivado | — | No se envía (`aviso = no_enviado`) |
+  | activo | definido | Un correo **redirigido** a esa casilla, con `[PRUEBA]` en el asunto y "Para: nombre <correo>" de quien debía recibirlo |
+  | activo | vacío | Al correo real de cada destinatario, **salvo dominios reservados** (`.example`, `.test`, `.invalid`, `.localhost`, `example.com/net/org`), que no existen: se omiten y el historial lo dice |
+
+  Los ejecutivos de la base de prueba son `@anticipa.example`: para probar el
+  envío, definir `CORREO_DERIVACIONES`. Con error de SMTP el caso queda
+  registrado (`aviso = fallido`). El historial siempre dice qué pasó.
+- **`caso_abierto` en `detectar_anomalias`:** cada anomalía trae el número del
+  caso abierto que ya la registró, con la misma referencia canónica.
+
+### `listar_casos(cliente_id) -> ListaCasos`
+
+Casos del cliente, del más reciente al más antiguo (`GET /mi/casos`). Incluye
+los sembrados del modo B, por eso `tipo` es texto libre.
 
 ## 3. Casuísticas y funciones
 

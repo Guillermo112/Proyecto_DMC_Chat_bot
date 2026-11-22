@@ -40,6 +40,16 @@ AUTH_MINUTOS_SESION = int(os.getenv("AUTH_MINUTOS_SESION", "30"))
 # Sin definir = "prod": si falta en el .env, el CRUD queda oculto (seguro por defecto).
 ENTORNO = (os.getenv("ENTORNO") or "prod").strip().lower()  # vacío = sin definir
 
+# Aviso por correo al derivar un caso (POST /mi/casos). El caso y el resultado
+# del aviso se registran siempre en interaccion_log.
+# - NOTIFICAR_DERIVACIONES desactivado: no se envía nada.
+# - CORREO_DERIVACIONES definido: se REDIRIGE ahí (pruebas), indicando a quién iba.
+# - Sin redirección: va al ejecutivo (y al responsable en CS-06), salvo a dominios
+#   reservados (.example, como los de la base de prueba), que no existen.
+# Un fallo de SMTP no deshace el caso.
+NOTIFICAR_DERIVACIONES = os.getenv("NOTIFICAR_DERIVACIONES", "").strip().lower() in ("1", "true", "si", "sí", "yes")
+CORREO_DERIVACIONES = os.getenv("CORREO_DERIVACIONES", "").strip()
+
 # Límite de peticiones a /auth/solicitar-codigo por IP (ventana deslizante).
 AUTH_MAX_SOLICITUDES_POR_IP = int(os.getenv("AUTH_MAX_SOLICITUDES_POR_IP", "5"))
 AUTH_VENTANA_SOLICITUDES_SEG = int(os.getenv("AUTH_VENTANA_SOLICITUDES_SEG", "900"))

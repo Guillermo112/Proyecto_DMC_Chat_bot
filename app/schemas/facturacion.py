@@ -208,6 +208,7 @@ class FacturaDuplicada(BaseModel):
     periodo: str
     facturas: list[FacturaResumen]
     monto_observado: float
+    caso_abierto: str | None = None
 
 
 class ServicioBajaFacturado(BaseModel):
@@ -218,6 +219,7 @@ class ServicioBajaFacturado(BaseModel):
     servicio: Servicio
     cobros: list[CobroObservado]
     monto_observado: float
+    caso_abierto: str | None = None
 
 
 class CobroTarifa(CobroObservado):
@@ -231,6 +233,7 @@ class TarifaDistinta(BaseModel):
     tarifa_pactada: float
     cobros: list[CobroTarifa]
     monto_observado: float
+    caso_abierto: str | None = None
 
 
 class ExcesoSinSustento(BaseModel):
@@ -247,6 +250,7 @@ class ExcesoSinSustento(BaseModel):
     gb_usados_registrados: float | None
     gb_exceso_registrados: float | None
     monto_observado: float
+    caso_abierto: str | None = None
 
 
 class AveriaSlaIncumplido(BaseModel):
@@ -265,6 +269,7 @@ class AveriaSlaIncumplido(BaseModel):
     tolerancia_horas: float
     horas_fuera_de_sla: float
     monto_observado: float
+    caso_abierto: str | None = None
 
 
 class AnomaliasCliente(BaseModel):
@@ -273,6 +278,9 @@ class AnomaliasCliente(BaseModel):
     Los montos son sin IGV y describen lo observado: no son una promesa de
     devolución ni un ajuste aprobado. Excluye facturas anuladas y averías que
     ya tienen un ajuste propuesto, aprobado o aplicado.
+
+    `caso_abierto` (en cada anomalía) es el número del caso abierto, derivado o
+    escalado que ya la registró (p. ej. "C-000019"): no registrarla de nuevo.
     """
     fecha_corte: str
     cantidad: int

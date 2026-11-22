@@ -42,6 +42,10 @@ validaciones `OK`. **Borra la base existente** antes de recrearla.
 `-X utf8` evita un `UnicodeEncodeError` en consolas Windows al imprimir las
 validaciones.
 
+**Regenerar al cambiar `db/schema.sql`.** El último cambio permite el canal
+`web` en `caso.canal` (pruebas por web o API; el bot usa `telegram`). Con una
+base anterior, el test `test_la_base_admite_el_canal_web` falla y lo indica.
+
 ## Variables de entorno
 
 Se leen de un archivo `.env` en la raíz del proyecto (opcional; no se
@@ -63,6 +67,8 @@ Si una variable también está definida en el sistema, gana la del sistema.
 | `AUTH_MINUTOS_SESION` | `30` | Duración del token de sesión |
 | `AUTH_MAX_SOLICITUDES_POR_IP` | `5` | Solicitudes de código por IP en la ventana |
 | `AUTH_VENTANA_SOLICITUDES_SEG` | `900` | Ventana del límite por IP (segundos) |
+| `NOTIFICAR_DERIVACIONES` | `false` | `true` avisa por correo al ejecutivo al registrar un caso (`POST /mi/casos`) |
+| `CORREO_DERIVACIONES` | — | Redirige ese aviso a una casilla de prueba (el correo dice a quién iba). Necesario con la base de prueba: sus ejecutivos son `@anticipa.example` y a esos dominios no se envía. Si falla el SMTP, el caso se registra igual |
 
 ## Ejecutar
 
@@ -120,6 +126,8 @@ pueden pedir datos de otro cliente (`app/api/cliente.py`, sobre `app/data/factur
 | `GET /mi/facturas/{numero}` | Cabecera y líneas; 404 si no existe **o es de otro cliente** |
 | `GET /mi/saldo` | Saldo pendiente y notas de crédito aplicadas |
 | `GET /mi/resumen?fecha_desde&fecha_hasta` | Totales por periodo (excluye anuladas) |
+| `POST /mi/casos` | Registra y deriva un caso al ejecutivo (modo A); 201 creado, 200 si ya existía |
+| `GET /mi/casos` | Casos del cliente y su estado |
 | `GET /mi/solicitudes?estado` | Solicitudes con días transcurridos y si están fuera de plazo (CS-06) |
 | `GET /mi/anomalias` | Anomalías detectadas (CS-01 a CS-05, CS-07) con su monto observado sin IGV |
 | `GET /mi/servicios?estado` | Servicios contratados (incluye los dados de baja): tarifa pactada, SLA, alta y baja |

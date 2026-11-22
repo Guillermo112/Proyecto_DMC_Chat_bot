@@ -590,13 +590,65 @@ def _averias_sla(con, cliente_id: int, servicios: dict[int, Servicio]) -> list[A
     ]
 
 
+# Grupo de AnomaliasCliente -> tipo de caso con que se registra (POST /mi/casos).
+TIPO_CASO_POR_GRUPO = {
+    "facturas_duplicadas": "factura_duplicada",
+    "servicios_baja_facturados": "servicio_baja_facturado",
+    "tarifas_distintas": "tarifa_distinta",
+    "excesos_sin_sustento": "exceso_sin_sustento",
+    "averias_sla_incumplido": "sla_averia",
+}
+ESTADOS_CASO_ABIERTO = ("abierto", "derivado", "escalado")
+
+
+def numero_caso(id_caso: int) -> str:
+    """Número de caso que ve el cliente: 19 -> 'C-000019'."""
+    return f"C-{id_caso:06d}"
+
+
+def referencia_anomalia(anomalia) -> tuple[str | None, int | None]:
+    """Referencia canónica de una anomalía: (número de factura, id de avería).
+
+    Es la que guarda el caso al registrarla y la que se compara para saber si ya
+    tiene uno abierto: la primera factura afectada (o la avería), que no cambia
+    aunque el cobro se repita en meses siguientes.
+    """
+    if isinstance(anomalia, AveriaSlaIncumplido):
+        return None, anomalia.id_averia
+    if isinstance(anomalia, FacturaDuplicada):
+        return anomalia.facturas[0].numero, None
+    if isinstance(anomalia, ExcesoSinSustento):
+        return anomalia.numero_factura, None
+    return anomalia.cobros[0].numero_factura, None  # baja facturada y tarifa distinta
+
+
+def _casos_abiertos(con, cliente_id: int) -> dict[tuple, str]:
+    """(tipo, número de factura, id de avería) -> número de caso, de los casos abiertos del cliente."""
+    marcadores = ", ".join("?" for _ in ESTADOS_CASO_ABIERTO)
+    filas = con.execute(
+        f"""
+        SELECT c.id_caso, c.tipo_caso, f.numero, c.id_averia
+        FROM caso c
+        LEFT JOIN factura f ON f.id_factura = c.id_factura AND f.id_cliente = c.id_cliente
+        WHERE c.id_cliente = ? AND c.estado IN ({marcadores})
+        ORDER BY c.id_caso
+        """,
+        (cliente_id, *ESTADOS_CASO_ABIERTO),
+    ).fetchall()
+    abiertos: dict[tuple, str] = {}
+    for f in filas:
+        abiertos.setdefault((f["tipo_caso"], f["numero"], f["id_averia"]), numero_caso(f["id_caso"]))
+    return abiertos
+
+
 def detectar_anomalias(cliente_id: int, db_path: Path | None = None) -> AnomaliasCliente:
     """Anomalías de facturación y SLA del cliente (CS-01 a CS-05 y CS-07).
 
     Usa las vistas de detección de `db/schema.sql`, siempre filtradas por
     `cliente_id`. Los cobros de un mismo servicio se agrupan con su total, para
     que nadie tenga que sumar periodos a mano. Los montos son sin IGV y son lo
-    observado, no una devolución ni un ajuste aprobado.
+    observado, no una devolución ni un ajuste aprobado. Cada anomalía trae
+    `caso_abierto` si ya hay un caso abierto que la registró.
     """
     _validar_cliente_id(cliente_id)
     with get_connection(db_path) as con:
@@ -608,7 +660,11 @@ def detectar_anomalias(cliente_id: int, db_path: Path | None = None) -> Anomalia
             excesos_sin_sustento=_excesos_sin_sustento(con, cliente_id, servicios),
             averias_sla_incumplido=_averias_sla(con, cliente_id, servicios),
         )
+        abiertos = _casos_abiertos(con, cliente_id)
         fecha_corte = _fecha_actual(con)
+    for grupo, anomalias in grupos.items():
+        for anomalia in anomalias:
+            anomalia.caso_abierto = abiertos.get((TIPO_CASO_POR_GRUPO[grupo], *referencia_anomalia(anomalia)))
     return AnomaliasCliente(fecha_corte=fecha_corte, cantidad=sum(len(g) for g in grupos.values()), **grupos)
 
 

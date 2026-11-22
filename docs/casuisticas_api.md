@@ -50,14 +50,15 @@ orden, qué campos leer y qué no decir.
 | "Me cobraron exceso de datos que no usamos" | CS-04 | `/mi/anomalias` |
 | "Nos quedamos sin servicio" | CS-05 / CS-07 | `/mi/anomalias` |
 | "Pedí algo hace semanas y nadie responde" | CS-06 | `/mi/solicitudes` |
-| "¿Pueden darme un descuento por la demora?" | CS-08 | Modo A: registrar y derivar (pendiente) |
+| "¿Pueden darme un descuento por la demora?" | CS-08 | `POST /mi/casos` (`gesto_comercial`) |
 | "¿Tengo facturas pendientes? ¿Cuándo vence?" | CS-11 | `/mi/saldo` |
 | "No me llega el código" / RUC que no existe | CS-12 | `/auth/solicitar-codigo` |
-| "Quiero bajar mi tarifa" / "pagar en cuotas" | CS-13 | `/mi/perfil` → registrar y derivar (pendiente) |
-| "Algo está mal" y no se encuentra anomalía | §1 del PDF | `/mi/anomalias` → registrar "consulta no resuelta" (pendiente) |
+| "Quiero bajar mi tarifa" / "pagar en cuotas" | CS-13 | `POST /mi/casos` (`fuera_de_alcance`) |
+| "Algo está mal" y no se encuentra anomalía | §1 del PDF | `/mi/anomalias` → `POST /mi/casos` (`consulta_no_resuelta`) |
+| "¿Cómo va mi caso?" | FAQ | `GET /mi/casos` |
 
-**Pendiente** = el paso existe en el PDF pero aún no tiene endpoint: es
-"registrar y derivar caso" (escritura), en `PENDIENTES_datos.md`, sección 3.
+Casi todas las casuísticas terminan en **registrar y derivar**: ver la sección
+"Registrar y derivar un caso" más abajo.
 
 ## Explicar una factura (método del PDF, §1)
 
@@ -71,10 +72,54 @@ orden, qué campos leer y qué no decir.
 4. **Responder la duda:** si pregunta por una diferencia, `GET /mi/comparar`
    (CS-09).
 5. **Sin anomalía y el cliente insiste:** `GET /mi/anomalias` vacío → no
-   discutir, pedir el detalle y registrar "consulta no resuelta" (pendiente).
+   discutir, pedir el detalle y registrar `consulta_no_resuelta` con
+   `POST /mi/casos`.
 
 Ejemplo: cliente 9, `GET /mi/facturas?periodo=2026-09` → `F001-000161`, total
 72 275,00; sus líneas incluyen el prorrateo de Arequipa (3 × 2 250 = 6 750).
+
+## Registrar y derivar un caso
+
+`POST /mi/casos` registra el caso y lo deriva al ejecutivo del cliente (modo A).
+Es la única ruta que escribe.
+
+```json
+{
+  "tipo": "servicio_baja_facturado",
+  "canal": "telegram",
+  "palabras_cliente": "Dimos de baja el enlace de Cusco y me lo siguen cobrando",
+  "resumen": "Cobro posterior a la baja del 30/09",
+  "referencias": {"id_servicio": 8}
+}
+```
+
+- **`tipo`:** de anomalía (`factura_duplicada`, `servicio_baja_facturado`,
+  `tarifa_distinta`, `exceso_sin_sustento`, `sla_averia`) o libre
+  (`solicitud_fuera_de_plazo`, `gesto_comercial`, `alta_no_solicitada`,
+  `fuera_de_alcance`, `consulta_no_resuelta`, `solicitud_datos`,
+  `contacto_persona`).
+- **`canal`:** `telegram` desde el bot; `web` para pruebas por web o API.
+- **`palabras_cliente`:** lo que pidió, tal cual (CS-13 pide no hacerle repetirlo).
+- **`referencias`** (opcionales): `numero_factura`, `periodo`, `id_servicio`,
+  `id_averia`, `id_solicitud`. Todas deben ser del cliente (si no, 404).
+- **Tipos de anomalía:** el servidor busca la anomalía en `/mi/anomalias` y toma
+  de ella la referencia y el monto. Si el cliente tiene una sola de ese tipo,
+  no hace falta ninguna referencia. Si no hay ninguna, responde 400 y sugiere
+  `consulta_no_resuelta`.
+- **El monto nunca va en el cuerpo:** `monto_discutido` sale de la anomalía.
+
+**Respuesta:** `numero_caso` (el `{n}` de los mensajes del PDF, p. ej.
+`C-000019`), `estado` (`derivado`), `derivado_a_nombre` (el ejecutivo),
+`monto_discutido`, `ya_existia` y `aviso`.
+
+- **201** si se creó; **200 con `ya_existia: true`** si ya había un caso abierto
+  equivalente (un reintento del bot no duplica: dar el mismo número).
+- **`aviso`:** `enviado`, `no_enviado` o `fallido`: si salió el correo al
+  ejecutivo (o a la casilla de prueba que lo redirige, `CORREO_DERIVACIONES`).
+  El caso queda registrado en los tres casos.
+- **Antes de registrar una anomalía**, mirar `caso_abierto` en `/mi/anomalias`:
+  si ya tiene número, informarlo en vez de registrar otra vez.
+- `GET /mi/casos` lista los casos del cliente con su estado.
 
 ## Fichas por casuística
 
@@ -86,8 +131,8 @@ Ejemplo: cliente 9, `GET /mi/facturas?periodo=2026-09` → `F001-000161`, total
 - **Otras rutas lo marcan sin sumar:** `/mi/saldo` (`saldo_total: null`,
   `periodos_multiples`), `/mi/resumen` (`facturas_multiples`) y `/mi/comparar`
   (`comparable: false`, `motivo: "facturas_multiples"`).
-- **Modo A:** confirmar que hay dos facturas iguales, registrar con ambos números
-  y derivar al ejecutivo (pendiente).
+- **Modo A:** confirmar que hay dos facturas iguales, registrar y derivar:
+  `POST /mi/casos` con `tipo: "factura_duplicada"` (el caso guarda ambos números).
 - **No decir:** cuál se anula, cuál pagar ni que se devolverá algo.
 - **Ejemplo:** cliente 1, 2026-11 → `F001-000254` y `F001-000255`, 185 000,00
   (218 300,00 con IGV) cada una.
@@ -99,7 +144,8 @@ Ejemplo: cliente 9, `GET /mi/facturas?periodo=2026-09` → `F001-000161`, total
 - **Leer:** `servicio.sede`, `servicio.fecha_baja`, `cobros[]` (`periodo`,
   `numero_factura`, `monto_observado`) y `monto_observado` (el total ya sumado).
 - **Modo A:** confirmar la fecha de baja, decir qué periodos se cobraron después
-  y derivar al ejecutivo (pendiente).
+  y registrar: `POST /mi/casos` con `tipo: "servicio_baja_facturado"`.
+  Si el cliente discute la fecha de baja, también se registra y deriva.
 - **No decir:** que se devolverá. El periodo de la baja no cuenta como cobro de
   más (la API ya lo excluye).
 - **Ejemplo:** cliente 2, Cusco, baja 2026-09-30, cobrado en 2026-10 y 2026-11:
@@ -111,7 +157,8 @@ Ejemplo: cliente 9, `GET /mi/facturas?periodo=2026-09` → `F001-000161`, total
   también está en `GET /mi/servicios` (`tarifa_pactada`).
 - **Leer:** `tarifa_pactada`, `cobros[]` (`periodo`, `tarifa_facturada`,
   `cantidad`, `monto_observado`) y `monto_observado` total.
-- **Modo A:** mostrar ambas tarifas, los periodos afectados y derivar (pendiente).
+- **Modo A:** mostrar ambas tarifas, los periodos afectados y registrar:
+  `POST /mi/casos` con `tipo: "tarifa_distinta"`.
 - **No decir:** que la tarifa "quedó mal por error"; decir que no coincide con
   el contrato. Si el cliente afirma otra tarifa pactada, derivar.
 - **Ejemplo:** cliente 3, MPLS Lima: pactada 10 500,00, facturada 12 000,00 × 3
@@ -123,8 +170,8 @@ Ejemplo: cliente 9, `GET /mi/facturas?periodo=2026-09` → `F001-000161`, total
 - **Leer:** `gb_facturados`, `precio_gb`, `monto_observado` y el consumo
   registrado: `gb_incluidos_registrados`, `gb_usados_registrados`,
   `gb_exceso_registrados` (`null` si no hay consumo del periodo).
-- **Modo A:** explicar que el consumo registrado no muestra exceso y derivar
-  (pendiente).
+- **Modo A:** explicar que el consumo registrado no muestra exceso y registrar:
+  `POST /mi/casos` con `tipo: "exceso_sin_sustento"`.
 - **Si el exceso sí tiene sustento** (no sale en anomalías): el PDF pide explicar
   el cálculo (GB incluidos, usados, precio por GB). Hoy solo hay
   `gb_incluidos_por_linea` y `precio_gb_exceso` en `GET /mi/servicios`; el
@@ -140,7 +187,8 @@ Ejemplo: cliente 9, `GET /mi/facturas?periodo=2026-09` → `F001-000161`, total
   (= tarifa pactada × unidades × horas fuera ÷ 720). El SLA está en
   `servicio.sla_pactado` como fracción (0.997 = 99,7 %).
 - **Modo A:** informar las horas de caída y que corresponde evaluar una
-  compensación; derivar al ejecutivo (pendiente). En modo A **no** se dice que
+  compensación; registrar con `POST /mi/casos` (`tipo: "sla_averia"`, y
+  `id_averia` si hay más de una). En modo A **no** se dice que
   el descuento ya se aplicó (el mensaje modelo de CS-07 es de modo B).
 - **No decir:** la causa técnica (la API no la expone), fechas de reparación,
   ni que el descuento cubre otros perjuicios. Si reclama daños, derivar.
@@ -153,14 +201,16 @@ Ejemplo: cliente 9, `GET /mi/facturas?periodo=2026-09` → `F001-000161`, total
 - **Leer:** `cantidad_fuera_de_plazo`, `plazo_atencion_dias` y por solicitud
   `tipo`, `estado`, `fecha_registro`, `dias_transcurridos`, `fuera_de_plazo`.
 - **Modo A:** informar estado y días, disculparse y avisar al responsable y al
-  ejecutivo (pendiente: es escritura). Derivar a una persona si lo pide.
+  ejecutivo: `POST /mi/casos` con `tipo: "solicitud_fuera_de_plazo"` e
+  `id_solicitud` (rechaza una solicitud que está dentro del plazo).
 - **No decir:** una fecha de resolución (la API no la tiene).
 - **Ejemplo:** cliente 10, solicitud abierta el 2026-11-14: 21 días con plazo de 10.
 
 ### CS-08 · Gesto comercial
 
-- **Modo A:** no se aplican gestos. Registrar el pedido y derivar al ejecutivo
-  (pendiente). Aplicar el gesto es modo B, fuera de alcance.
+- **Modo A:** no se aplican gestos. Registrar el pedido y derivar al ejecutivo:
+  `POST /mi/casos` con `tipo: "gesto_comercial"`. Aplicar el gesto es modo B,
+  fuera de alcance.
 
 ### CS-09 · Variación fuerte de facturación
 
@@ -174,7 +224,7 @@ Ejemplo: cliente 9, `GET /mi/facturas?periodo=2026-09` → `F001-000161`, total
   explicar como subida; `"periodo_sin_facturas"` → no hay con qué comparar.
 - **Modo A:** explicar la causa con las líneas y ofrecer el detalle por correo.
 - **No decir:** que la subida "es normal" sin la causa. Si el cliente dice que no
-  pidió el alta, registrar y derivar (pendiente).
+  pidió el alta, `POST /mi/casos` con `tipo: "alta_no_solicitada"`.
 - **Ejemplo:** cliente 7, `periodo_b=2026-10` → +24 000,00 (+32,79 %), línea
   nueva "Enlace MPLS Callao" 2 × 12 000, alta el 2026-10-01.
 
@@ -219,8 +269,8 @@ Ejemplo: cliente 9, `GET /mi/facturas?periodo=2026-09` → `F001-000161`, total
 ### CS-13 · Pedido fuera de alcance
 
 - **Llamar:** `GET /mi/perfil` → `ejecutivo_nombre`, `ejecutivo_correo`.
-- **Modo A:** registrar el pedido con las palabras del cliente y derivar
-  (pendiente).
+- **Modo A:** registrar el pedido con las palabras del cliente y derivar:
+  `POST /mi/casos` con `tipo: "fuera_de_alcance"`.
 - **No decir:** opiniones sobre tarifas futuras ni negociar.
 
 ## Preguntas frecuentes del PDF (§4)
@@ -232,9 +282,9 @@ Ejemplo: cliente 9, `GET /mi/facturas?periodo=2026-09` → `F001-000161`, total
 | ¿Por qué cambió el monto? | CS-09: `/mi/comparar` |
 | ¿Qué es el prorrateo? | Definición del glosario; con su factura, CS-10 |
 | ¿Qué hago si no me llega el código? | CS-12: revisar spam, pedir otro con `/auth/solicitar-codigo` |
-| ¿Puedo cambiar el correo de facturación? | Solicitud de actualización de datos: registrar (pendiente) |
-| ¿Me envían copia de la factura? | Solicitud de copia: registrar (pendiente) |
-| ¿Puedo hablar con una persona? | Registrar y derivar con resumen (pendiente); ejecutivo en `/mi/perfil` |
+| ¿Puedo cambiar el correo de facturación? | `POST /mi/casos` con `tipo: "solicitud_datos"` |
+| ¿Me envían copia de la factura? | `POST /mi/casos` con `tipo: "solicitud_datos"` y la factura |
+| ¿Puedo hablar con una persona? | `POST /mi/casos` con `tipo: "contacto_persona"`; ejecutivo en `/mi/perfil` |
 
 ## Rutas y casuísticas que las usan
 
@@ -249,4 +299,6 @@ Ejemplo: cliente 9, `GET /mi/facturas?periodo=2026-09` → `F001-000161`, total
 | `GET /mi/servicios` | CS-02, CS-03, CS-04, CS-05, CS-07, CS-10 |
 | `GET /mi/anomalias` | CS-01 a CS-05, CS-07, "consulta no resuelta" |
 | `GET /mi/solicitudes` | CS-06 |
+| `POST /mi/casos` | CS-01 a CS-09, CS-13, "consulta no resuelta" y FAQ |
+| `GET /mi/casos` | FAQ ("¿cómo va mi caso?") |
 | `POST /auth/solicitar-codigo`, `POST /auth/verificar-codigo`, `GET /auth/sesion` | CS-12 |

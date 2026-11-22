@@ -66,7 +66,9 @@ for r in con.execute("SELECT * FROM v_averias_sin_compensar"):
 - **Maestros:** `producto`, `cliente`, `personal`, `servicio_contratado`
 - **Facturación:** `factura`, `factura_linea`, `consumo`
 - **Operación:** `averia`, `solicitud`
-- **Agente:** `caso`, `ajuste`, `verificacion`, `interaccion_log`
+- **Agente:** `caso`, `ajuste`, `verificacion`, `interaccion_log`. `caso.canal`:
+  `telegram` (el bot), `correo`, `manual` (cargado por una persona) o `web`
+  (pruebas por web o API).
 - **Reglas:** `parametro`, `politica_tramo`
 - **Vistas de detección:** una por casuística (ver tabla siguiente)
 

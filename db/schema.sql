@@ -148,7 +148,7 @@ CREATE TABLE solicitud (
 CREATE TABLE caso (
     id_caso          INTEGER PRIMARY KEY,
     id_cliente       INTEGER NOT NULL REFERENCES cliente(id_cliente),
-    canal            TEXT NOT NULL CHECK (canal IN ('telegram','correo','manual')),
+    canal            TEXT NOT NULL CHECK (canal IN ('telegram','correo','manual','web')),  -- web: pruebas por web o API
     opcion           TEXT CHECK (opcion IN ('A','B')),
     tipo_caso        TEXT NOT NULL,
     id_factura       INTEGER REFERENCES factura(id_factura),
