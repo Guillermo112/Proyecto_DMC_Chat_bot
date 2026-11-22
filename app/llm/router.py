@@ -1,7 +1,5 @@
-# Copia de sesion7/_comun/llm_router.py (curso). No editar aquí: si cambia el
-# router del curso, reemplazar este archivo completo. Lo envuelve app/llm/__init__.py.
 """
-llm_router.py — Un solo cliente para cualquier API de LLM.
+Router de modelos de lenguaje: un solo cliente para cualquier API de LLM.
 
 La configuración no menciona marcas: siempre son las mismas variables.
 
@@ -38,7 +36,7 @@ Qué resuelve
 
 Uso
 ---
-    from llm_router import crear_router
+    from app.llm import crear_router
     r = crear_router()
     print(r.chat([{"role": "user", "content": "hola"}]).texto)
 
@@ -53,10 +51,10 @@ Interfaces compatibles: `get_langchain_model()` (BaseChatModel) y `get_client()`
 
 CLI
 ---
-    python llm_router.py --list              # configuración activa
-    python llm_router.py --probe             # prueba de vida de cada endpoint
-    python llm_router.py --demo "hola"       # una conversación
-    python llm_router.py --demo "hola" --tools
+    python -m app.llm.router --list              # configuración activa
+    python -m app.llm.router --probe             # prueba de vida de cada endpoint
+    python -m app.llm.router --demo "hola"       # una conversación
+    python -m app.llm.router --demo "hola" --tools
 """
 from __future__ import annotations
 
@@ -465,7 +463,7 @@ class Router:
 
     def _log(self, mensaje: str) -> None:
         if self.verbose:
-            print(f"[llm_router] {mensaje}")
+            print(f"[llm] {mensaje}")
 
     def candidatos(self) -> list[tuple[Endpoint, str]]:
         """Endpoints utilizables con su familia ya resuelta."""

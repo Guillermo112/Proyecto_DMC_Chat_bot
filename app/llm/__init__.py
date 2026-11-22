@@ -1,4 +1,4 @@
-"""Cliente de modelos de lenguaje (router del curso, sesion7).
+"""Cliente de modelos de lenguaje (`app/llm/router.py`).
 
 Lee `LLM_BASE_URL`, `LLM_API_KEY` y `LLM_MODEL` (y respaldos `LLM_2_*` ...
 `LLM_9_*`) del entorno. Se importa `app.config` primero para que el `.env` de la

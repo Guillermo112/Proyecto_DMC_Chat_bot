@@ -50,13 +50,13 @@ prometería cosas que el sistema no hace.
 
 ## 3. RAG
 
-- [x] Stack (como sesion7, sin LangChain ni almacén externo): router del curso en
-      `app/llm` (copia de `_comun/llm_router.py`), índice en memoria en `app/rag`
+- [x] Stack (sin LangChain ni almacén externo): router de modelos en `app/llm`,
+      índice en memoria en `app/rag`
       con embeddings locales granite 97M, respaldo TF-IDF, umbral y MMR.
 - [ ] Ingesta: PDF 01 y 03, `faq.json` ya alineada y `catalogo.json`. Decidir si
       el PDF 02 se indexa entero o solo las filas "Modo A", "No digas" y "Deriva cuando".
 - [ ] `faq.json` **no** entra al índice de documentos: va a su propio clasificador
-      (`app/faq`), como en sesion7. El RAG (`app/rag`) indexa PDF y `catalogo.json`.
+      (`app/faq`). El RAG (`app/rag`) indexa PDF y `catalogo.json`.
 - [x] Filtro de ingesta de `catalogo.json` (decidido 2026-11-22), en `app/rag/ingesta.py`:
       **lista blanca** de campos por sección (un campo nuevo no entra hasta autorizarlo)
       y un fragmento por registro, con metadatos `fuente`, `seccion` e `id`.
@@ -92,7 +92,7 @@ prometería cosas que el sistema no hace.
       Muestra puntajes, qué pasa el umbral y qué llegaría al prompt; el historial se
       copia como CSV para calibrar.
 - [ ] Calibrar `RAG_UMBRAL` con el set de evaluación. Medición con granite y filas de
-      tabla: relevantes 0,83-0,96, ajenas 0,74-0,81 (por defecto 0,82; el 0,35 de sesion7
+      tabla: relevantes 0,83-0,96, ajenas 0,74-0,81 (por defecto 0,82; el 0,35 inicial
       no filtra). El umbral solo no separa lo fuera de tema: lo cubre el prompt.
 - [x] Prompt del sistema (`app/agente/prompt.py`, ~490 palabras): alcance modo A,
       montos solo desde herramientas, `null` no es 0, no prometer devoluciones ni fechas,

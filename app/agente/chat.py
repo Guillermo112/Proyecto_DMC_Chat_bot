@@ -1,6 +1,6 @@
 """El turno del chat: RAG previo, modelo con herramientas y memoria corta.
 
-Misma metodología que `chat_service.py` de sesion7, con dos cambios por costo:
+Dos decisiones por costo:
 
 1. **El RAG se consulta antes de llamar al modelo**, no como herramienta. La
    búsqueda es local y gratis; si algún fragmento pasa el umbral se agrega como

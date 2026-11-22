@@ -148,7 +148,7 @@ def leer_catalogo(ruta: Path) -> list[Fragmento]:
 
 
 # ---------------------------------------------------------------------------
-# PDF: oraciones agrupadas con solape (como sesion7, sin spaCy)
+# PDF: oraciones agrupadas con solape (regex, sin spaCy)
 # ---------------------------------------------------------------------------
 _RE_FRONTERA = re.compile(r"(?<=[.!?…])\s+(?=[¿¡A-ZÁÉÍÓÚÑ0-9])")
 _RE_ABREVIATURA = re.compile(

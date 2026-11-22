@@ -358,7 +358,7 @@ app/
   api/           # rutas del cliente autenticado (/mi) y banco de pruebas (/dev/rag)
   data/          # acceso a SQLite (solo lectura, filtrado por cliente)
   schemas/       # modelos Pydantic
-  llm/           # cliente del modelo de lenguaje (router del curso)
+  llm/           # cliente del modelo de lenguaje (router con respaldos)
   rag/           # RAG: lectura de PDF, filtro de modo A, índice y búsqueda
   static/        # página del banco de pruebas
   agente/        # prompt del sistema y turno del chat (RAG previo + herramientas)
