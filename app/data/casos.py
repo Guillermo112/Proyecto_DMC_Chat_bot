@@ -207,7 +207,7 @@ def _avisar(numero: str, tipo: str, cliente, palabras: str, sustento: str, desti
         omitidos = [d for d in destinatarios if dominio_reservado(d["correo"])]
         if not reales:
             return "no_enviado", (f"Aviso por correo no enviado: el correo de {nombres} es de prueba "
-                                  "(dominio reservado). En dev: CORREO_EJECUTIVO_n o CORREO_DERIVACIONES.")
+                                  "(dominio reservado). En dev, definir CORREO_DERIVACIONES para redirigirlo.")
         envios = [(d["correo"], asunto, cuerpo) for d in reales]
         exito = "Aviso por correo enviado a " + ", ".join(
             f"{d['nombre']} ({otp.enmascarar(d['correo'])})" for d in reales) + "."

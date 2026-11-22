@@ -36,7 +36,6 @@ class ClientePrueba:
     correo: str
     casuisticas: tuple[str, ...]
     ejecutivo: str = ""
-    ejecutivo_correo: str = ""
 
     @property
     def slot(self) -> int:
@@ -45,10 +44,6 @@ class ClientePrueba:
     @property
     def recibe_correo(self) -> bool:
         return not self.correo.lower().endswith(".example")
-
-    @property
-    def ejecutivo_recibe(self) -> bool:
-        return bool(self.ejecutivo_correo) and not self.ejecutivo_correo.lower().endswith(".example")
 
 
 def _casuisticas(casos_json: Path) -> tuple[dict[int, list[str]], str | None]:
@@ -79,15 +74,15 @@ def leer(db_path: Path | None = None, casos_json: Path | None = None) -> tuple[l
     con = sqlite3.connect(f"file:{Path(db_path).as_posix()}?mode=ro", uri=True)
     try:
         filas = con.execute(
-            "SELECT c.id_cliente, c.ruc, c.razon_social, c.correo_facturacion, p.nombre, p.correo"
+            "SELECT c.id_cliente, c.ruc, c.razon_social, c.correo_facturacion, p.nombre"
             " FROM cliente c LEFT JOIN personal p ON p.id_personal = c.id_ejecutivo"
             " WHERE c.id_cliente BETWEEN ? AND ? ORDER BY c.id_cliente",
             (CLIENTES_PRUEBA.start, CLIENTES_PRUEBA.stop - 1),
         ).fetchall()
     finally:
         con.close()
-    clientes = [ClientePrueba(i, r, s, c, tuple(casos.get(i, ())), e or "", ec or "")
-                for i, r, s, c, e, ec in filas]
+    clientes = [ClientePrueba(i, r, s, c, tuple(casos.get(i, ())), e or "")
+                for i, r, s, c, e in filas]
     return clientes, inexistente
 
 
@@ -108,15 +103,14 @@ def tabla(clientes: list[ClientePrueba], nombres: dict[str, str], inexistente: s
     if inexistente:
         lineas.append(f"RUC inexistente para probar CS-12: {inexistente} "
                       "(la respuesta es la misma que con un RUC válido y no llega correo).")
-    ejecutivos = {c.ejecutivo: c for c in clientes if c.ejecutivo}
+    ejecutivos = {c.slot: c.ejecutivo for c in clientes if c.ejecutivo}
     if ejecutivos:
-        lineas += ["", "Ejecutivos (reciben el aviso de los casos derivados, con NOTIFICAR_DERIVACIONES=true):"]
-        for nombre, c in sorted(ejecutivos.items(), key=lambda x: x[1].slot):
-            destino = c.ejecutivo_correo if c.ejecutivo_recibe else f"{c.ejecutivo_correo} (no recibe)"
-            lineas.append(f"  slot {c.slot}  {nombre:<22} {destino}")
-    if any(not c.recibe_correo or not c.ejecutivo_recibe for c in clientes if c.ejecutivo):
-        lineas.append("(no recibe) = correo .example: pon tu correo en CORREO_PRUEBA_n (cliente) o "
-                      "CORREO_EJECUTIVO_n (ejecutivo) de tu slot y ejecuta regenerar_base.bat.")
+        lineas += ["", "Ejecutivo al que se derivan los casos de cada slot (para ver el aviso: "
+                       "CORREO_DERIVACIONES y NOTIFICAR_DERIVACIONES=true):"]
+        lineas += [f"  slot {slot}  {nombre}" for slot, nombre in sorted(ejecutivos.items())]
+    if any(not c.recibe_correo for c in clientes):
+        lineas.append("(no recibe) = correo .example: pon tu correo en tu slot CORREO_PRUEBA_n "
+                      "del .env y ejecuta regenerar_base.bat.")
     return "\n".join(lineas)
 
 

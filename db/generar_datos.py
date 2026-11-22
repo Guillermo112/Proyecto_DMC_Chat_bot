@@ -16,8 +16,6 @@ en correos reales del equipo: CORREO_PRUEBA_1..5 (y opcional NOMBRE_PRUEBA_1..5)
 deja sus clientes con facturacion@clienteNN.example. Para ignorar el .env:
     python3 generar_datos.py --publico     # todos los correos terminan en .example
 Requiere AUTH_SECRET en ../.env: los códigos de prueba se guardan con el mismo HMAC que la app.
-CORREO_EJECUTIVO_1..5 en ../.env: correo del ejecutivo de los clientes de cada slot (para
-recibir el aviso de los casos derivados); el nombre del ejecutivo no cambia.
 """
 import sqlite3, random, json, os, sys
 from datetime import date, datetime, timedelta
@@ -56,21 +54,6 @@ def ejecutivo_de(cid):
     return (cid % 5) + 1
 
 
-def ejecutivo_del_slot(n):
-    """Ejecutivo de los clientes de prueba del slot n: todos comparten el mismo
-    (slot 1 -> 2, slot 2 -> 3, slot 3 -> 4, slot 4 -> 5, slot 5 -> 1)."""
-    ejecutivos = {ejecutivo_de(cid) for cid in range(1, 14) if (cid - 1) % N_SLOTS + 1 == n}
-    assert len(ejecutivos) == 1, f"el slot {n} tiene clientes con distintos ejecutivos"
-    return ejecutivos.pop()
-
-
-# Correo del ejecutivo de los clientes de tu slot (CORREO_EJECUTIVO_n): para recibir el
-# aviso de los casos que se derivan (con NOTIFICAR_DERIVACIONES=true). Solo cambia el
-# correo; el nombre del ejecutivo se mantiene. Vacío, o --publico: @anticipa.example.
-CORREOS_EJECUTIVO = {} if PUBLICO else {  # id_personal -> correo
-    ejecutivo_del_slot(n): os.getenv(f"CORREO_EJECUTIVO_{n}", "").strip()
-    for n in range(1, N_SLOTS + 1) if os.getenv(f"CORREO_EJECUTIVO_{n}", "").strip()
-}
 
 FECHA_ACTUAL = date(2026, 12, 5)
 IGV = 0.18
@@ -390,8 +373,7 @@ def main():
     for pid, nombre, rol in PERSONAL:
         correo = nombre.lower().replace(" ", ".").replace("á", "a").replace("é", "e").replace("í", "i") \
             .replace("ó", "o").replace("ú", "u").replace("ñ", "n") + ".example"
-        correo = CORREOS_EJECUTIVO.get(pid) or f"{correo[:-8]}@anticipa.example"
-        cur.execute("INSERT INTO personal VALUES (?,?,?,?)", (pid, nombre, rol, correo))
+        cur.execute("INSERT INTO personal VALUES (?,?,?,?)", (pid, nombre, rol, f"{correo[:-8]}@anticipa.example"))
     cur.executemany("INSERT INTO producto VALUES (?,?,?,?,?,?,?,?)", PRODUCTOS)
     for c in clients.values():
         cur.execute("INSERT INTO cliente VALUES (?,?,?,?,?,?,?,?,?,?)",
