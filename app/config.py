@@ -43,7 +43,8 @@ ENTORNO = (os.getenv("ENTORNO") or "prod").strip().lower()  # vacío = sin defin
 # Aviso por correo al derivar un caso (POST /mi/casos). El caso y el resultado
 # del aviso se registran siempre en interaccion_log.
 # - NOTIFICAR_DERIVACIONES desactivado: no se envía nada.
-# - CORREO_DERIVACIONES definido: se REDIRIGE ahí (pruebas), indicando a quién iba.
+# - CORREO_DERIVACIONES definido y ENTORNO=dev: se REDIRIGE ahí (pruebas), indicando a
+#   quién iba. Fuera de dev se ignora (ver app/data/casos.py, _redireccion_de_prueba).
 # - Sin redirección: va al ejecutivo (y al responsable en CS-06), salvo a dominios
 #   reservados (.example, como los de la base de prueba), que no existen.
 # Un fallo de SMTP no deshace el caso.

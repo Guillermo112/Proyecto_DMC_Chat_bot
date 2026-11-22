@@ -41,6 +41,7 @@ def base(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DB_PATH", copia)
     monkeypatch.setattr(config, "NOTIFICAR_DERIVACIONES", False)
     monkeypatch.setattr(config, "CORREO_DERIVACIONES", "")
+    monkeypatch.setattr(config, "ENTORNO", "dev")  # la redirección solo vale en dev; no depender del .env
     return copia
 
 
@@ -243,6 +244,32 @@ def test_sin_redireccion_no_envia_a_dominios_reservados(monkeypatch):
     assert r.aviso == "no_enviado"
     ultimo = _q("SELECT mensaje FROM interaccion_log WHERE id_caso = ? ORDER BY id_log DESC LIMIT 1", _id(r.numero_caso))
     assert "dominio reservado" in ultimo[0]["mensaje"] and "CORREO_DERIVACIONES" in ultimo[0]["mensaje"]
+
+
+def test_fuera_de_dev_la_redireccion_se_ignora(monkeypatch, caplog):
+    """Un .env de desarrollo copiado a producción no desvía los casos a una sola casilla."""
+    enviados = []
+    monkeypatch.setattr(config, "ENTORNO", "prod")
+    monkeypatch.setattr(config, "NOTIFICAR_DERIVACIONES", True)
+    monkeypatch.setattr(config, "CORREO_DERIVACIONES", "pruebas@equipo.example")
+    monkeypatch.setattr(otp, "enviar_correo", lambda *a: enviados.append(a))
+    con = sqlite3.connect(config.DB_PATH)
+    con.execute("UPDATE personal SET correo = 'ejecutivo@empresa.pe' "
+                "WHERE id_personal = (SELECT id_ejecutivo FROM cliente WHERE id_cliente = 1)")
+    con.commit()
+    con.close()
+    r = casos.registrar_caso(1, _caso(tipo="factura_duplicada"))
+    [(destino, asunto, _)] = enviados
+    assert destino == "ejecutivo@empresa.pe" and not asunto.startswith("[PRUEBA]") and r.aviso == "enviado"
+    assert "CORREO_DERIVACIONES se ignora con ENTORNO=prod" in caplog.text
+
+
+def test_fuera_de_dev_sin_correo_real_no_envia(monkeypatch):
+    monkeypatch.setattr(config, "ENTORNO", "prod")
+    monkeypatch.setattr(config, "NOTIFICAR_DERIVACIONES", True)
+    monkeypatch.setattr(config, "CORREO_DERIVACIONES", "pruebas@equipo.example")
+    monkeypatch.setattr(otp, "enviar_correo", lambda *a: pytest.fail("no debía enviar"))
+    assert casos.registrar_caso(1, _caso(tipo="factura_duplicada")).aviso == "no_enviado"
 
 
 def test_cs06_un_solo_aviso_si_el_responsable_es_el_ejecutivo(monkeypatch):

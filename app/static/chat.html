@@ -53,9 +53,6 @@
   .msg.bot { align-self: flex-start; background: var(--bot); }
   .msg.sistema { align-self: center; background: transparent; border: none; color: var(--suave); font-size: 13px; }
   .msg .meta { display: block; margin-top: 6px; font-size: 12px; color: var(--suave); }
-  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
-  .chip { font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--borde);
-          background: var(--bg); color: var(--texto); cursor: pointer; }
   #formChat { display: flex; gap: 8px; }
   #formChat input { flex: 1; }
   aside { overflow-y: auto; }
@@ -112,7 +109,6 @@
 <main id="app" class="oculto">
   <section class="panel chat">
     <div id="mensajes"></div>
-    <div class="chips" id="chips"></div>
     <form id="formChat">
       <input id="entrada" type="text" maxlength="2000" placeholder="Escribe tu consulta…" autocomplete="off">
       <button id="enviar" type="submit">Enviar</button>
@@ -132,8 +128,6 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
-const EJEMPLOS = ["Me llegaron dos facturas iguales", "¿Por qué subió mi factura de octubre?",
-  "¿Qué es el prorrateo?", "¿Tengo facturas vencidas?", "Quiero renegociar mi tarifa", "Sí, regístralo por favor"];
 const almacen = {
   leer(k) { try { return sessionStorage.getItem(k); } catch { return null; } },
   guardar(k, v) { try { sessionStorage.setItem(k, v); } catch {} },
@@ -289,8 +283,6 @@ async function enviar(texto) {
 }
 
 $("formChat").onsubmit = (e) => { e.preventDefault(); enviar($("entrada").value); };
-$("chips").innerHTML = EJEMPLOS.map((q) => `<button type="button" class="chip">${escapar(q)}</button>`).join("");
-$("chips").querySelectorAll(".chip").forEach((b) => b.onclick = () => enviar(b.textContent));
 $("nueva").onclick = async () => {
   try { await api(`/mi/chat/${conversacion}`, { method: "DELETE" }); } catch {}
   conversacion = nuevoId();

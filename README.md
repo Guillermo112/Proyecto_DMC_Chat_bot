@@ -299,7 +299,7 @@ suyo. `.env.example` es solo la plantilla: la app no lo lee, y si cambia no actu
 |---|---|---|
 | `ENTORNO` | `prod` (la plantilla trae `dev`) | `dev` monta el CRUD `/api/...` y el banco de pruebas `/dev/rag`, **sin autenticación**. Otro valor o vacío los oculta |
 | `NOTIFICAR_DERIVACIONES` | `false` | `true` avisa por correo al ejecutivo al registrar un caso (`POST /mi/casos`) |
-| `CORREO_DERIVACIONES` | — | Redirige ese aviso a una casilla de prueba (el correo dice a quién iba). Necesario con la base de prueba: sus ejecutivos son `@anticipa.example` y a esos dominios no se envía. Si falla el SMTP, el caso se registra igual |
+| `CORREO_DERIVACIONES` | — | **Solo con `ENTORNO=dev`:** redirige todos los avisos a una casilla de prueba (el correo dice a quién iba). Fuera de dev se ignora y el aviso va al ejecutivo real, para que un `.env` de desarrollo no desvíe los casos de todos los clientes a una sola casilla. Para recibir el aviso de tu slot, mejor `CORREO_EJECUTIVO_n`. Si falla el SMTP, el caso se registra igual |
 
 ### Con valor por defecto (cámbialas solo si sabes por qué)
 

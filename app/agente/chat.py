@@ -49,10 +49,10 @@ ETIQUETAS_ANOMALIA = {
     "averias_sla_incumplido": ("una avería que superó el SLA", "averías que superaron el SLA"),
 }
 OPCIONES = "\n".join([
-    "- revisar o explicar una factura",
-    "- ver si hay cobros que no corresponden",
-    "- consultar tu saldo y vencimientos",
-    "- revisar tus solicitudes o tus casos",
+    "- Revisar o explicar una factura",
+    "- Ver si hay cobros que no corresponden",
+    "- Consultar tu saldo y vencimientos",
+    "- Revisar tus solicitudes o tus casos",
 ])
 
 
