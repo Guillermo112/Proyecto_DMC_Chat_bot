@@ -42,6 +42,10 @@ validaciones `OK`. **Borra la base existente** antes de recrearla.
 `-X utf8` evita un `UnicodeEncodeError` en consolas Windows al imprimir las
 validaciones.
 
+**Regenerar al cambiar `db/schema.sql`.** El último cambio permite el canal
+`web` en `caso.canal` (pruebas por web o API; el bot usa `telegram`). Con una
+base anterior, el test `test_la_base_admite_el_canal_web` falla y lo indica.
+
 ## Variables de entorno
 
 Se leen de un archivo `.env` en la raíz del proyecto (opcional; no se

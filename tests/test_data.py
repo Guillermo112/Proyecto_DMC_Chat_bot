@@ -149,3 +149,14 @@ def test_health():
     resp = TestClient(app).get("/health")
     assert resp.status_code == 200
     assert resp.json() == {"status": "OK", "db": "OK"}
+
+
+def test_la_base_admite_el_canal_web():
+    """`caso.canal` admite 'web' (pruebas por web o API) desde que se agregó al schema.
+
+    Si falla, la base es anterior al cambio: regenerarla con
+    `python -X utf8 db/generar_datos.py`.
+    """
+    with get_connection() as con:
+        sql = con.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'caso'").fetchone()[0]
+    assert "'web'" in sql, "anticipa.db es anterior al canal 'web': regenerar con db/generar_datos.py"
