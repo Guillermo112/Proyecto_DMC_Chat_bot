@@ -103,20 +103,40 @@ class ResumenFacturacion(BaseModel):
 
 
 
-# ------------------------------------------------- comparación entre periodos
+# ------------------------------------------------- servicios contratados
+
+EstadoServicio = Literal["activo", "baja"]
+
 
 class Servicio(BaseModel):
-    """Servicio contratado: explica por qué aparece, cambia o desaparece una línea."""
+    """Servicio contratado por el cliente.
+
+    `tarifa_pactada` es la del contrato, por unidad y mes, sin IGV; es la
+    referencia para CS-03 (no se expone la tarifa de lista del producto, para
+    no confundirla con la pactada). `sla_pactado` es una fracción (0.997 =
+    99,7 % de disponibilidad); None en móviles. Los GB solo aplican a móviles.
+    """
     id_servicio: int
     codigo_producto: str
     producto: str
+    unidad: str
     sede: str
     cantidad: int
     tarifa_pactada: float
     sla_pactado: float | None
+    gb_incluidos_por_linea: float | None
+    precio_gb_exceso: float | None
     fecha_activacion: str
     fecha_baja: str | None
-    estado: str
+    estado: EstadoServicio
+
+
+class ListaServicios(BaseModel):
+    fecha_corte: str
+    servicios: list[Servicio]
+
+
+# ------------------------------------------------- comparación entre periodos
 
 
 class LineaPeriodo(BaseModel):

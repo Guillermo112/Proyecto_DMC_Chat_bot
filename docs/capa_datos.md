@@ -100,6 +100,25 @@ inclusive). Excluye facturas anuladas.
 - **Uso en el agente:** ver la evolución de varios meses. Para explicar una
   subida concreta (CS-09) usar `comparar_periodos`.
 
+### `obtener_servicios(cliente_id, estado=None) -> ListaServicios`
+
+Servicios contratados del cliente, incluidos los dados de baja.
+
+- **Tablas:** `servicio_contratado`, `producto`.
+- **Filtro:** `estado` ∈ `activo`, `baja` (por defecto, todos: CS-02 necesita
+  la fecha de baja).
+- **Devuelve:** `fecha_corte` y por servicio: `producto`, `unidad`, `sede`,
+  `cantidad`, `tarifa_pactada` (por unidad y mes, sin IGV), `sla_pactado`
+  (fracción: 0.997 = 99,7 %; `None` en móviles), `gb_incluidos_por_linea` y
+  `precio_gb_exceso` (solo móviles), `fecha_activacion`, `fecha_baja` y `estado`.
+- **No expone la tarifa de lista** del producto: en CS-03 la referencia es
+  la del contrato (cliente 3: pactada 10 500, lista 12 000), y mostrar ambas
+  invitaría a dar por buena la facturada.
+- **Errores:** `ValueError` por estado o `cliente_id` inválidos.
+- **Uso en el agente:** CS-02 (fecha de baja), CS-03 (tarifa pactada), CS-05 y
+  CS-07 (SLA), CS-04 (GB incluidos y precio por GB), CS-09 y CS-10 (alta).
+  `comparar_periodos` usa la misma consulta para el `servicio` de cada línea.
+
 ### `comparar_periodos(cliente_id, periodo_b, periodo_a=None) -> ComparacionPeriodos`
 
 Qué cambió entre dos periodos facturados (`AAAA-MM`). Si falta `periodo_a`, se
@@ -132,7 +151,7 @@ usa el mes anterior a `periodo_b`. Excluye facturas anuladas.
 | Casuística | Función principal | Comentario |
 |---|---|---|
 | CS-01 Factura duplicada | `listar_facturas`, `detalle_factura` | Saldo, resumen y comparación marcan el periodo en `periodos_multiples` / `facturas_multiples` sin sumar. La detección con igual importe está en `v_facturas_duplicadas` (aún sin función). |
-| CS-02 a CS-05, CS-07 | `detalle_factura` | El cálculo de ajustes usa las vistas de detección; pendiente. |
+| CS-02 a CS-05, CS-07 | `detalle_factura`, `obtener_servicios` | Servicios dan la referencia (baja, tarifa pactada, SLA, GB). La detección (vistas) y el cálculo de ajustes están pendientes. |
 | CS-06 Solicitud fuera de plazo | — | Pendiente (`solicitud`, `v_solicitudes_vencidas`). |
 | CS-08 Gesto comercial | — | Pendiente (`v_gestos_mes_actual`). |
 | CS-09 Variación de facturación | `comparar_periodos` | Líneas que cambiaron y su servicio (alta o baja). |

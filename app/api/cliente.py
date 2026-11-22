@@ -21,11 +21,12 @@ from app.schemas import (
     Cliente,
     ComparacionPeriodos,
     FacturaDetalle,
+    ListaServicios,
     PaginaFacturas,
     ResumenFacturacion,
     SaldoPendiente,
 )
-from app.schemas.facturacion import EstadoFactura
+from app.schemas.facturacion import EstadoFactura, EstadoServicio
 
 router = APIRouter(
     prefix="/mi",
@@ -118,3 +119,12 @@ def mi_comparacion(
     responde `comparable: false` con el `motivo` y sin variación: no suma ni elige una.
     """
     return _400(facturacion.comparar_periodos, cliente_id, periodo_b, periodo_a)
+
+
+@router.get("/servicios", response_model=ListaServicios)
+def mis_servicios(
+    estado: EstadoServicio | None = Query(None, description="activo o baja; por defecto, todos"),
+    cliente_id: int = Depends(cliente_actual),
+):
+    """Servicios contratados: tarifa pactada (sin IGV), SLA, fecha de alta y de baja."""
+    return _400(facturacion.obtener_servicios, cliente_id, estado)

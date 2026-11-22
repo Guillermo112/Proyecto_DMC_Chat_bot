@@ -19,6 +19,7 @@ from app.schemas import (
     LineaComparada,
     LineaFactura,
     LineaPeriodo,
+    ListaServicios,
     NotaCreditoAplicada,
     PaginaFacturas,
     PeriodoComparado,
@@ -30,6 +31,7 @@ from app.schemas import (
 
 ESTADOS_FACTURA = {"emitida", "pagada", "vencida", "en_disputa", "anulada"}
 ESTADOS_PENDIENTES = ("emitida", "vencida", "en_disputa")
+ESTADOS_SERVICIO = {"activo", "baja"}
 # Mismo umbral que la vista v_variacion_facturacion (db/schema.sql).
 UMBRAL_VARIACION_PCT = 25.0
 _PATRON_PERIODO = re.compile(r"[0-9]{4}-(0[1-9]|1[0-2])")  # [0-9], no \d: \d acepta dígitos Unicode
@@ -293,6 +295,44 @@ def resumen_facturacion(
     )
 
 
+# ------------------------------------------------- servicios contratados
+
+def _servicios(con, cliente_id: int, estado: str | None = None) -> list[Servicio]:
+    """Servicios del cliente con los datos de su producto (sin la tarifa de lista)."""
+    condiciones, params = ["s.id_cliente = ?"], [cliente_id]
+    if estado is not None:
+        condiciones.append("s.estado = ?")
+        params.append(estado)
+    filas = con.execute(
+        f"""
+        SELECT s.id_servicio, s.codigo_producto, p.nombre AS producto, p.unidad, s.sede,
+               s.cantidad, s.tarifa_pactada, s.sla_pactado, p.gb_incluidos_por_linea,
+               p.precio_gb_exceso, s.fecha_activacion, s.fecha_baja, s.estado
+        FROM servicio_contratado s
+        JOIN producto p ON p.codigo = s.codigo_producto
+        WHERE {" AND ".join(condiciones)}
+        ORDER BY s.id_servicio
+        """,
+        params,
+    ).fetchall()
+    return [Servicio(**dict(f)) for f in filas]
+
+
+def obtener_servicios(
+    cliente_id: int, estado: str | None = None, db_path: Path | None = None
+) -> ListaServicios:
+    """Servicios contratados del cliente: tarifa pactada, SLA, alta y baja.
+
+    Por defecto incluye los dados de baja, que CS-02 necesita (fecha de baja).
+    `estado` filtra por `activo` o `baja`.
+    """
+    _validar_cliente_id(cliente_id)
+    if estado is not None and estado not in ESTADOS_SERVICIO:
+        raise ValueError(f"Estado de servicio inválido. Permitidos: {sorted(ESTADOS_SERVICIO)}")
+    with get_connection(db_path) as con:
+        return ListaServicios(fecha_corte=_fecha_actual(con), servicios=_servicios(con, cliente_id, estado))
+
+
 # ------------------------------------------------- comparación entre periodos
 
 def _periodo_anterior(periodo: str) -> str:
@@ -300,17 +340,17 @@ def _periodo_anterior(periodo: str) -> str:
     return f"{anio - 1}-12" if mes == 1 else f"{anio}-{mes - 1:02d}"
 
 
-def _lineas_con_servicio(con, cliente_id: int, id_factura: int) -> dict:
-    """Líneas de una factura del cliente, indexadas por (servicio, clase de cargo)."""
+def _lineas_con_servicio(con, cliente_id: int, id_factura: int, servicios: dict[int, Servicio]) -> dict:
+    """Líneas de una factura del cliente, indexadas por (servicio, clase de cargo).
+
+    `servicios` son los del mismo cliente (`_servicios`): una línea cuyo servicio
+    no esté ahí queda sin servicio, nunca con el de otro cliente.
+    """
     filas = con.execute(
         """
-        SELECT l.id_linea, l.id_servicio, l.tipo, l.concepto, l.cantidad, l.precio_unitario, l.monto,
-               s.codigo_producto, p.nombre AS producto, s.sede, s.cantidad AS s_cantidad,
-               s.tarifa_pactada, s.sla_pactado, s.fecha_activacion, s.fecha_baja, s.estado AS s_estado
+        SELECT l.id_linea, l.id_servicio, l.tipo, l.concepto, l.cantidad, l.precio_unitario, l.monto
         FROM factura_linea l
         JOIN factura f ON f.id_factura = l.id_factura
-        LEFT JOIN servicio_contratado s ON s.id_servicio = l.id_servicio AND s.id_cliente = f.id_cliente
-        LEFT JOIN producto p ON p.codigo = s.codigo_producto
         WHERE l.id_factura = ? AND f.id_cliente = ?
         ORDER BY l.id_linea
         """,
@@ -323,16 +363,8 @@ def _lineas_con_servicio(con, cliente_id: int, id_factura: int) -> dict:
         clave = (f["id_servicio"], clase)
         if f["id_servicio"] is None or clave in lineas:  # sin servicio o repetida: no se empareja a ciegas
             clave = (f["id_servicio"], clase, f["concepto"], f["id_linea"])
-        servicio = None
-        if f["codigo_producto"] is not None:
-            servicio = Servicio(
-                id_servicio=f["id_servicio"], codigo_producto=f["codigo_producto"], producto=f["producto"],
-                sede=f["sede"], cantidad=f["s_cantidad"], tarifa_pactada=f["tarifa_pactada"],
-                sla_pactado=f["sla_pactado"], fecha_activacion=f["fecha_activacion"],
-                fecha_baja=f["fecha_baja"], estado=f["s_estado"],
-            )
         linea = LineaPeriodo(**{k: f[k] for k in LineaPeriodo.model_fields})
-        lineas[clave] = (linea, servicio)
+        lineas[clave] = (linea, servicios.get(f["id_servicio"]))
     return lineas
 
 
@@ -412,9 +444,10 @@ def comparar_periodos(
                 variacion_fuerte=None, lineas=None, lineas_sin_cambio=None,
             )
 
+        servicios = {s.id_servicio: s for s in _servicios(con, cliente_id)}
         lineas, sin_cambio = _diferencias(
-            _lineas_con_servicio(con, cliente_id, a.facturas[0].id_factura),
-            _lineas_con_servicio(con, cliente_id, b.facturas[0].id_factura),
+            _lineas_con_servicio(con, cliente_id, a.facturas[0].id_factura, servicios),
+            _lineas_con_servicio(con, cliente_id, b.facturas[0].id_factura, servicios),
         )
 
     variacion = round(b.subtotal - a.subtotal, 2)

@@ -120,6 +120,7 @@ pueden pedir datos de otro cliente (`app/api/cliente.py`, sobre `app/data/factur
 | `GET /mi/facturas/{numero}` | Cabecera y líneas; 404 si no existe **o es de otro cliente** |
 | `GET /mi/saldo` | Saldo pendiente y notas de crédito aplicadas |
 | `GET /mi/resumen?fecha_desde&fecha_hasta` | Totales por periodo (excluye anuladas) |
+| `GET /mi/servicios?estado` | Servicios contratados (incluye los dados de baja): tarifa pactada, SLA, alta y baja |
 | `GET /mi/comparar?periodo_b&periodo_a` | Qué cambió entre dos periodos (por defecto, frente al mes anterior); con facturas duplicadas responde un aviso sin comparar |
 
 Las rutas `/api/...` son el CRUD de desarrollo para Postman: no usan token y

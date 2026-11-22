@@ -4,6 +4,7 @@ from app.data.facturacion import (
     detalle_factura,
     listar_facturas,
     obtener_cliente,
+    obtener_servicios,
     resumen_facturacion,
     saldo_pendiente,
 )
@@ -14,6 +15,7 @@ __all__ = [
     "detalle_factura",
     "listar_facturas",
     "obtener_cliente",
+    "obtener_servicios",
     "resumen_facturacion",
     "saldo_pendiente",
 ]
