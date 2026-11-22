@@ -1,0 +1,280 @@
+{
+  "agente": {
+    "nombre": "Anticipa",
+    "descripcion": "Agente conversacional de facturación para clientes corporativos: explica facturas, detecta cobros incorrectos, calcula compensaciones por averías y deriva casos según el nivel de aprobación.",
+    "categorias": [
+      { "id": "general", "descripcion": "Qué es Anticipa, qué puede y qué no puede hacer." },
+      { "id": "identificacion_seguridad", "descripcion": "RUC, código de verificación, sesión y bloqueo." },
+      { "id": "facturacion", "descripcion": "Ciclo de facturación, IGV, prorrateo, saldos, variaciones y servicios contratados." },
+      { "id": "ajustes", "descripcion": "Notas de crédito o débito, tramos de aprobación y cobros incorrectos." },
+      { "id": "averias_sla", "descripcion": "Averías, niveles de servicio (SLA) y compensaciones." },
+      { "id": "solicitudes", "descripcion": "Estado y plazo de atención de solicitudes." },
+      { "id": "gesto_comercial", "descripcion": "Gesto comercial (política P6, por validar con el negocio)." },
+      { "id": "derivacion", "descripcion": "Registro de casos y derivación a ejecutivo, jefatura o gerencia." },
+      { "id": "fuera_de_alcance", "descripcion": "Pedidos que el agente no gestiona (renegociar tarifas, temas legales o de pagos)." }
+    ],
+    "politicas": {
+      "general": "El modelo de lenguaje conversa y redacta; los montos, tramos y plazos los calculan funciones determinísticas sobre la base de datos. El agente no inventa montos, fechas ni estados: todo dato sale de una herramienta.",
+      "identificacion_seguridad": "El cliente escribe su RUC y el sistema envía un código de 6 dígitos al correo de facturación registrado. El código vale 10 minutos y admite 3 intentos. Con el código correcto, la sesión dura 30 minutos. Solo se guarda el hash del código. Si el RUC no existe, el mensaje es el mismo que para un RUC válido, para no revelar qué RUC existen. Tras 3 intentos fallidos la sesión se bloquea.",
+      "facturacion": "La facturación es mes vencido: el periodo se emite el día 1 del mes siguiente y vence a los 20 días. El IGV es 18 % del monto sin IGV. Se usa un mes comercial de 30 días. Prorrateo = tarifa × (30 − día de activación) ÷ 30; si la activación es el día 1, se factura el mes completo.",
+      "ajustes": "El tramo se calcula sobre el monto sin IGV del ajuste: tramo 1 (hasta S/ 100) es automático; tramo 2 (más de S/ 100 hasta S/ 1 000) lo aprueba el ejecutivo de cuenta; tramo 3 (más de S/ 1 000 hasta S/ 50 000) lo aprueba la jefatura de facturación; tramo 4 (más de S/ 50 000) se escala a gerencia y finanzas sin prometer resultados al cliente. El agente no aprueba ajustes fuera de su tramo.",
+      "averias_sla": "Compensación por SLA = tarifa pactada × unidades afectadas × horas fuera de tolerancia ÷ 720. Tolerancia (horas) = (1 − SLA pactado) × 720; solo cuenta lo que excede la tolerancia. Una avería ya compensada no se vuelve a compensar.",
+      "solicitudes": "El plazo de atención de las solicitudes es de 10 días, medido contra la fecha de sistema. Una solicitud abierta o en proceso con más días que el plazo se considera vencida.",
+      "gesto_comercial": "Política P6 (por validar con el negocio): hasta S/ 100 sin IGV, un gesto por cliente y por mes, solo en la opción B. Un segundo pedido en el mes se rechaza; un gesto mayor a S/ 100 no se aplica y pasa al tramo que le corresponda.",
+      "derivacion": "Cuando el agente registra un caso, lo deriva al responsable del tramo y le envía un aviso por correo con el sustento (ejecutivo de cuenta, jefatura de facturación o gerencia y finanzas).",
+      "fuera_de_alcance": "El agente no renegocia tarifas, no habla de temas legales ni de pagos, y no promete aprobaciones de los tramos 2 a 4: registra el pedido y lo deriva al ejecutivo de cuenta."
+    }
+  },
+  "tramos": [
+    {
+      "codigo": "TRAMO-1",
+      "nombre": "Automático",
+      "categoria": "ajustes",
+      "monto_desde_sin_igv": 0.00,
+      "monto_hasta_sin_igv": 100.00,
+      "aprueba": "Automático",
+      "accion_agente": "Opción B: emite la nota de crédito o débito y avisa al cliente. Opción A: registra y deriva."
+    },
+    {
+      "codigo": "TRAMO-2",
+      "nombre": "Ejecutivo",
+      "categoria": "ajustes",
+      "monto_desde_sin_igv": 100.00,
+      "monto_hasta_sin_igv": 1000.00,
+      "aprueba": "Ejecutivo de cuenta",
+      "accion_agente": "Propone el ajuste y lo envía al ejecutivo de cuenta, que aprueba."
+    },
+    {
+      "codigo": "TRAMO-3",
+      "nombre": "Jefatura",
+      "categoria": "ajustes",
+      "monto_desde_sin_igv": 1000.00,
+      "monto_hasta_sin_igv": 50000.00,
+      "aprueba": "Jefatura de facturación",
+      "accion_agente": "Propone el ajuste y lo envía a la jefatura de facturación."
+    },
+    {
+      "codigo": "TRAMO-4",
+      "nombre": "Gerencia y finanzas",
+      "categoria": "ajustes",
+      "monto_desde_sin_igv": 50000.00,
+      "monto_hasta_sin_igv": null,
+      "aprueba": "Gerencia y finanzas",
+      "accion_agente": "Escala el caso con el sustento. No promete ningún resultado al cliente."
+    }
+  ],
+  "servicios": [
+    {
+      "codigo": "INTERNET001",
+      "nombre": "Internet dedicado 500 Mbps",
+      "categoria": "facturacion",
+      "tipo": "internet",
+      "precio": 4500.00,
+      "moneda": "PEN",
+      "unidad_cobro": "por enlace",
+      "sla_pct": 99.5,
+      "tolerancia_horas_mes": 3.6,
+      "specs": "Enlace de Internet dedicado de 500 Mbps",
+      "nota": "Tarifa y SLA de catálogo; aplican los del contrato del cliente."
+    },
+    {
+      "codigo": "MPLS001",
+      "nombre": "Enlace MPLS",
+      "categoria": "facturacion",
+      "tipo": "mpls",
+      "precio": 12000.00,
+      "moneda": "PEN",
+      "unidad_cobro": "por enlace",
+      "sla_pct": 99.7,
+      "tolerancia_horas_mes": 2.16,
+      "specs": "Enlace MPLS entre sedes del cliente",
+      "nota": "Tarifa y SLA de catálogo; aplican los del contrato del cliente."
+    },
+    {
+      "codigo": "SIP001",
+      "nombre": "Troncal SIP",
+      "categoria": "facturacion",
+      "tipo": "voz",
+      "precio": 3200.00,
+      "moneda": "PEN",
+      "unidad_cobro": "por troncal",
+      "sla_pct": 99.5,
+      "tolerancia_horas_mes": 3.6,
+      "specs": "Troncal SIP para telefonía corporativa",
+      "nota": "Tarifa y SLA de catálogo; aplican los del contrato del cliente."
+    },
+    {
+      "codigo": "MOVIL001",
+      "nombre": "Móvil corporativo",
+      "categoria": "facturacion",
+      "tipo": "movil",
+      "precio": 80.00,
+      "moneda": "PEN",
+      "unidad_cobro": "por línea",
+      "sla_pct": null,
+      "tolerancia_horas_mes": null,
+      "specs": "10 GB incluidos por línea; exceso a S/ 2,00 por GB",
+      "precio_exceso_por_gb": 2.00,
+      "gb_incluidos_por_linea": 10,
+      "nota": "Tarifa de catálogo; aplica la del contrato del cliente."
+    }
+  ],
+  "casuisticas": [
+    {
+      "codigo": "CS-01",
+      "nombre": "Factura duplicada de gran monto",
+      "categoria": "ajustes",
+      "genera_ajuste": true,
+      "tramo_referencial": 4,
+      "decide": "Gerencia y finanzas",
+      "vista_deteccion": "v_facturas_duplicadas",
+      "opcion_a": "Explica que detectó dos facturas iguales, registra el caso y lo deriva al ejecutivo con ambos números de factura.",
+      "opcion_b": "Arma el sustento y escala a gerencia y finanzas con nota de crédito sugerida; no promete la anulación.",
+      "faq_relacionadas": ["aju-004", "aju-001", "aju-003"]
+    },
+    {
+      "codigo": "CS-02",
+      "nombre": "Servicio dado de baja que se sigue facturando",
+      "categoria": "ajustes",
+      "genera_ajuste": true,
+      "tramo_referencial": 3,
+      "decide": "Jefatura de facturación",
+      "vista_deteccion": "v_servicios_baja_facturados",
+      "opcion_a": "Confirma la fecha de baja, explica que se facturó después y deriva al ejecutivo.",
+      "opcion_b": "Propone una nota de crédito por los periodos posteriores a la baja y la envía a la jefatura.",
+      "faq_relacionadas": ["aju-005"]
+    },
+    {
+      "codigo": "CS-03",
+      "nombre": "Tarifa facturada distinta a la pactada",
+      "categoria": "ajustes",
+      "genera_ajuste": true,
+      "tramo_referencial": 3,
+      "decide": "Jefatura de facturación",
+      "vista_deteccion": "v_tarifa_distinta",
+      "opcion_a": "Muestra tarifa pactada y facturada, y deriva al ejecutivo.",
+      "opcion_b": "Propone nota de crédito por la diferencia de los periodos afectados a la jefatura.",
+      "faq_relacionadas": ["aju-006"]
+    },
+    {
+      "codigo": "CS-04",
+      "nombre": "Exceso de consumo móvil sin sustento",
+      "categoria": "ajustes",
+      "genera_ajuste": true,
+      "tramo_referencial": 2,
+      "decide": "Ejecutivo de cuenta",
+      "vista_deteccion": "v_exceso_sin_sustento",
+      "opcion_a": "Explica que el consumo no muestra exceso y deriva al ejecutivo.",
+      "opcion_b": "Propone nota de crédito por el exceso cobrado al ejecutivo.",
+      "faq_relacionadas": ["aju-007"]
+    },
+    {
+      "codigo": "CS-05",
+      "nombre": "Avería con SLA incumplido (compensación mayor)",
+      "categoria": "averias_sla",
+      "genera_ajuste": true,
+      "tramo_referencial": 2,
+      "decide": "Ejecutivo de cuenta",
+      "vista_deteccion": "v_averias_sin_compensar",
+      "opcion_a": "Informa las horas de caída y que corresponde evaluar compensación; deriva al ejecutivo.",
+      "opcion_b": "Propone nota de crédito al ejecutivo con el detalle del cálculo.",
+      "faq_relacionadas": ["sla-001", "sla-002"]
+    },
+    {
+      "codigo": "CS-06",
+      "nombre": "Solicitud fuera del plazo de atención",
+      "categoria": "solicitudes",
+      "genera_ajuste": false,
+      "tramo_referencial": null,
+      "decide": "Responsable y ejecutivo",
+      "vista_deteccion": "v_solicitudes_vencidas",
+      "opcion_a": "Informa el estado y los días transcurridos; avisa al responsable y al ejecutivo.",
+      "opcion_b": "Lo mismo y, si el cliente reclama el retraso, ofrece el gesto comercial P6 cuando corresponda.",
+      "faq_relacionadas": ["sol-001"]
+    },
+    {
+      "codigo": "CS-07",
+      "nombre": "Avería con SLA incumplido (compensación menor)",
+      "categoria": "averias_sla",
+      "genera_ajuste": true,
+      "tramo_referencial": 1,
+      "decide": "Automático",
+      "vista_deteccion": "v_averias_sin_compensar",
+      "opcion_a": "Informa el descuento que corresponde y deriva al ejecutivo para emitirlo.",
+      "opcion_b": "Emite la nota de crédito automática y se lo comunica al cliente.",
+      "faq_relacionadas": ["sla-001", "aju-002"]
+    },
+    {
+      "codigo": "CS-08",
+      "nombre": "Gesto comercial P6 y segundo pedido en el mes",
+      "categoria": "gesto_comercial",
+      "genera_ajuste": true,
+      "tramo_referencial": 1,
+      "decide": "Automático (P6, por validar)",
+      "vista_deteccion": "v_gestos_mes_actual",
+      "opcion_a": "No aplica gestos: registra y deriva al ejecutivo.",
+      "opcion_b": "Aplica el primer gesto; ante el segundo pedido lo rechaza, explica el motivo y ofrece derivar al ejecutivo.",
+      "faq_relacionadas": ["com-001"]
+    },
+    {
+      "codigo": "CS-09",
+      "nombre": "Variación fuerte de facturación (explicable)",
+      "categoria": "facturacion",
+      "genera_ajuste": false,
+      "tramo_referencial": null,
+      "decide": "Sin ajuste",
+      "vista_deteccion": "v_variacion_facturacion",
+      "opcion_a": "Explica la causa con las líneas de servicio y ofrece enviar el detalle por correo.",
+      "opcion_b": "Igual que la opción A.",
+      "faq_relacionadas": ["fac-004"]
+    },
+    {
+      "codigo": "CS-10",
+      "nombre": "Consulta de prorrateo",
+      "categoria": "facturacion",
+      "genera_ajuste": false,
+      "tramo_referencial": null,
+      "decide": "Sin ajuste",
+      "vista_deteccion": null,
+      "opcion_a": "Explica la fórmula paso a paso y muestra la línea de la factura; no ofrece descuento.",
+      "opcion_b": "Igual que la opción A.",
+      "faq_relacionadas": ["fac-003"]
+    },
+    {
+      "codigo": "CS-11",
+      "nombre": "Consulta de saldo y factura vencida",
+      "categoria": "facturacion",
+      "genera_ajuste": false,
+      "tramo_referencial": null,
+      "decide": "Sin ajuste",
+      "vista_deteccion": null,
+      "opcion_a": "Informa estado, importe y fecha de vencimiento; deriva al ejecutivo lo de cobranza y plazos de pago.",
+      "opcion_b": "Igual que la opción A.",
+      "faq_relacionadas": ["fac-005"]
+    },
+    {
+      "codigo": "CS-12",
+      "nombre": "Identificación fallida y RUC inexistente",
+      "categoria": "identificacion_seguridad",
+      "genera_ajuste": false,
+      "tramo_referencial": null,
+      "decide": "Bloqueo de sesión",
+      "vista_deteccion": null,
+      "opcion_a": "Tras 3 intentos fallidos bloquea la sesión y sugiere contactar al ejecutivo; con RUC inexistente da el mismo mensaje que con uno válido.",
+      "opcion_b": "Igual que la opción A.",
+      "faq_relacionadas": ["seg-002", "seg-003", "seg-004", "seg-006"]
+    },
+    {
+      "codigo": "CS-13",
+      "nombre": "Pedido fuera de alcance (renegociar tarifa)",
+      "categoria": "fuera_de_alcance",
+      "genera_ajuste": false,
+      "tramo_referencial": null,
+      "decide": "Ejecutivo de cuenta",
+      "vista_deteccion": null,
+      "opcion_a": "Indica que no puede gestionarlo, registra el pedido y lo deriva al ejecutivo de cuenta.",
+      "opcion_b": "Igual que la opción A.",
+      "faq_relacionadas": ["fa-001", "der-002"]
+    }
+  ]
+}

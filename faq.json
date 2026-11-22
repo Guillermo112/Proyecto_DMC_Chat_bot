@@ -1,0 +1,562 @@
+{
+  "agente": "Anticipa",
+  "version": "1.0",
+  "idioma": "es-PE",
+  "descripcion": "Preguntas frecuentes del agente conversacional Anticipa: consultas y ajustes de facturación para clientes corporativos. Las respuestas con {llaves} son plantillas: los valores (montos, fechas, estados, números de caso) siempre salen de las herramientas del agente, nunca del modelo.",
+  "convenciones": {
+    "moneda": "S/ con separador de miles por espacio y coma decimal, dos decimales (ej. S/ 1 000,00)",
+    "montos": "Los tramos se calculan sobre el monto sin IGV. IGV 18 %.",
+    "opciones": "A = el agente registra y deriva. B = el agente propone o aplica el ajuste según su tramo.",
+    "requiere_verificacion": "true = no se responde con datos del cliente hasta validar el código de 6 dígitos."
+  },
+  "faqs": [
+    {
+      "id": "gen-001",
+      "categoria": "general",
+      "intencion": "que_es_anticipa",
+      "pregunta": "¿Qué es Anticipa y qué puede hacer por mí?",
+      "variantes": [
+        "¿Quién eres?",
+        "¿Para qué sirves?",
+        "¿Qué puedes hacer?",
+        "Ayuda"
+      ],
+      "respuesta": "Soy Anticipa, el asistente de facturación para clientes corporativos. Puedo explicarte tus facturas, revisar si hay cobros que no corresponden (por ejemplo, facturas duplicadas, servicios dados de baja, tarifas distintas a las pactadas o excesos sin sustento), calcular compensaciones por averías y consultar el estado de tus solicitudes. Si encuentro algo, registro el caso y lo derivo a quien corresponde.",
+      "requiere_verificacion": false,
+      "herramientas": [],
+      "derivar_a": null,
+      "casuistica_relacionada": []
+    },
+    {
+      "id": "gen-002",
+      "categoria": "general",
+      "intencion": "que_no_puede_hacer",
+      "pregunta": "¿Qué cosas no puedes hacer?",
+      "variantes": [
+        "¿Cuáles son tus límites?",
+        "¿Qué no gestionas?",
+        "¿Puedes aprobar cualquier ajuste?"
+      ],
+      "respuesta": "No renegocio tarifas, no trato temas legales ni de pagos, y no apruebo ajustes fuera de mi alcance. Los ajustes de mayor monto los revisa una persona (ejecutivo de cuenta, jefatura de facturación o gerencia y finanzas) y yo no puedo prometerte su aprobación. En esos casos registro tu caso y lo derivo a tu ejecutivo de cuenta.",
+      "requiere_verificacion": false,
+      "herramientas": [],
+      "derivar_a": "ejecutivo_de_cuenta",
+      "casuistica_relacionada": ["CS-13"]
+    },
+    {
+      "id": "gen-003",
+      "categoria": "general",
+      "intencion": "como_calcula_montos",
+      "pregunta": "¿Los montos los calcula una inteligencia artificial?",
+      "variantes": [
+        "¿Cómo calculas los montos?",
+        "¿Puedo confiar en las cifras que me das?",
+        "¿Te inventas los números?"
+      ],
+      "respuesta": "No. Yo converso y redacto, pero los montos, tramos y plazos los calculan funciones del sistema a partir de la información de facturación. No invento montos, fechas ni estados: todo dato que te doy proviene de una consulta al sistema.",
+      "requiere_verificacion": false,
+      "herramientas": [],
+      "derivar_a": null,
+      "casuistica_relacionada": []
+    },
+
+    {
+      "id": "seg-001",
+      "categoria": "identificacion_seguridad",
+      "intencion": "como_identificarme",
+      "pregunta": "¿Cómo me identifico para consultar mi facturación?",
+      "variantes": [
+        "¿Qué necesito para empezar?",
+        "¿Cómo ingreso?",
+        "¿Por qué me piden el RUC?",
+        "Quiero revisar mi factura"
+      ],
+      "respuesta": "Escríbeme tu RUC. Te enviaremos un código de 6 dígitos al correo de facturación registrado y, con ese código, podré mostrarte la información de tu cuenta.",
+      "requiere_verificacion": false,
+      "herramientas": ["enviar_codigo"],
+      "derivar_a": null,
+      "casuistica_relacionada": ["CS-12"]
+    },
+    {
+      "id": "seg-002",
+      "categoria": "identificacion_seguridad",
+      "intencion": "mensaje_envio_codigo",
+      "pregunta": "Mi RUC no existe o no estoy seguro de que esté registrado",
+      "variantes": [
+        "¿Mi RUC está registrado?",
+        "No sé si mi empresa está en el sistema",
+        "Escribí mi RUC y no pasó nada"
+      ],
+      "respuesta": "Te enviamos un código al correo registrado. Si no lo recibes, revisa la bandeja de spam o comunícate con tu ejecutivo de cuenta.",
+      "requiere_verificacion": false,
+      "herramientas": ["enviar_codigo"],
+      "derivar_a": "ejecutivo_de_cuenta",
+      "casuistica_relacionada": ["CS-12"],
+      "notas": "Seguridad: se usa el mismo mensaje para un RUC válido y para uno inexistente, y no se envía correo si el RUC no existe. Nunca confirmar ni negar qué RUC están registrados."
+    },
+    {
+      "id": "seg-003",
+      "categoria": "identificacion_seguridad",
+      "intencion": "vigencia_codigo",
+      "pregunta": "¿Cuánto tiempo vale el código y cuántos intentos tengo?",
+      "variantes": [
+        "El código ya no funciona",
+        "Mi código venció",
+        "¿Cuántas veces puedo equivocarme?"
+      ],
+      "respuesta": "El código vale 10 minutos y tienes 3 intentos para ingresarlo. Si venció, puedes pedir uno nuevo escribiendo tu RUC otra vez.",
+      "requiere_verificacion": false,
+      "herramientas": ["verificar_codigo", "enviar_codigo"],
+      "derivar_a": null,
+      "casuistica_relacionada": ["CS-12"]
+    },
+    {
+      "id": "seg-004",
+      "categoria": "identificacion_seguridad",
+      "intencion": "sesion_bloqueada",
+      "pregunta": "Se bloqueó mi sesión, ¿qué hago?",
+      "variantes": [
+        "Puse mal el código tres veces",
+        "No me deja entrar",
+        "Me aparece sesión bloqueada"
+      ],
+      "respuesta": "Por seguridad, la sesión se bloquea tras 3 intentos con código incorrecto. Para recuperar el acceso comunícate con tu ejecutivo de cuenta.",
+      "requiere_verificacion": false,
+      "herramientas": ["verificar_codigo"],
+      "derivar_a": "ejecutivo_de_cuenta",
+      "casuistica_relacionada": ["CS-12"],
+      "notas": "El estado queda registrado como bloqueado en la tabla verificacion."
+    },
+    {
+      "id": "seg-005",
+      "categoria": "identificacion_seguridad",
+      "intencion": "duracion_sesion",
+      "pregunta": "¿Cuánto dura mi sesión una vez verificado?",
+      "variantes": [
+        "¿Cada cuánto tengo que validar el código?",
+        "Se cerró mi sesión"
+      ],
+      "respuesta": "Con el código correcto, tu sesión dura 30 minutos. Pasado ese tiempo, tendrás que validar un nuevo código para seguir consultando.",
+      "requiere_verificacion": false,
+      "herramientas": [],
+      "derivar_a": null,
+      "casuistica_relacionada": []
+    },
+    {
+      "id": "seg-006",
+      "categoria": "identificacion_seguridad",
+      "intencion": "datos_sin_verificar",
+      "pregunta": "¿Puedes darme el detalle de mi factura sin el código?",
+      "variantes": [
+        "Solo dime el monto, no tengo el código",
+        "Es urgente, ¿puedes saltarte la verificación?"
+      ],
+      "respuesta": "Antes de verificar tu identidad no puedo mostrar ningún dato de facturación, para proteger la información de tu empresa. Escríbeme tu RUC y te envío el código al correo registrado.",
+      "requiere_verificacion": false,
+      "herramientas": ["enviar_codigo"],
+      "derivar_a": null,
+      "casuistica_relacionada": ["CS-12"]
+    },
+
+    {
+      "id": "fac-001",
+      "categoria": "facturacion",
+      "intencion": "ciclo_facturacion",
+      "pregunta": "¿Cuándo se factura y cuándo vence mi factura?",
+      "variantes": [
+        "¿Cómo es el ciclo de facturación?",
+        "¿Cuándo emiten la factura del mes?",
+        "¿En cuántos días vence?"
+      ],
+      "respuesta": "La facturación es mes vencido: el periodo se emite el día 1 del mes siguiente y vence a los 20 días. Por ejemplo, el periodo de noviembre se emite el 1 de diciembre. Para ver la fecha exacta de una factura tuya, la consulto en el sistema.",
+      "requiere_verificacion": false,
+      "herramientas": ["obtener_factura"],
+      "derivar_a": null,
+      "casuistica_relacionada": ["CS-11"]
+    },
+    {
+      "id": "fac-002",
+      "categoria": "facturacion",
+      "intencion": "igv_y_mes_comercial",
+      "pregunta": "¿Cómo se calcula el IGV y cuántos días tiene un mes para la facturación?",
+      "variantes": [
+        "¿Cuánto es el IGV?",
+        "¿Por qué el total es mayor al subtotal?",
+        "¿El mes es de 30 o 31 días?"
+      ],
+      "respuesta": "El IGV es 18 % del monto sin IGV, y el total es el monto más el IGV. Para los cálculos de facturación se usa un mes comercial de 30 días.",
+      "requiere_verificacion": false,
+      "herramientas": [],
+      "derivar_a": null,
+      "casuistica_relacionada": []
+    },
+    {
+      "id": "fac-003",
+      "categoria": "facturacion",
+      "intencion": "explicar_prorrateo",
+      "pregunta": "¿Por qué me cobraron solo parte del mes? ¿Cómo se calcula el prorrateo?",
+      "variantes": [
+        "El cobro de mi primer mes no me cuadra",
+        "¿Por qué me cobran 15 días?",
+        "No entiendo el prorrateo",
+        "¿Está mal el cobro del mes de activación?"
+      ],
+      "respuesta": "Cuando un servicio se activa durante el mes, el primer cobro es proporcional: tarifa × (30 − día de activación) ÷ 30. Si se activó el día 1, se factura el mes completo. En tu caso, {detalle_calculo_prorrateo}. Si quieres, te muestro la línea correspondiente de la factura.",
+      "requiere_verificacion": true,
+      "herramientas": ["obtener_servicios", "obtener_factura"],
+      "derivar_a": null,
+      "casuistica_relacionada": ["CS-10"],
+      "notas": "Es una consulta, no genera ajuste. No ofrecer descuento ni nota de crédito. Explicar paso a paso con las cifras reales de la factura."
+    },
+    {
+      "id": "fac-004",
+      "categoria": "facturacion",
+      "intencion": "variacion_facturacion",
+      "pregunta": "Mi factura subió mucho este mes, ¿por qué?",
+      "variantes": [
+        "¿Por qué aumentó mi facturación?",
+        "Me cobraron mucho más que el mes pasado",
+        "Explícame la diferencia con el mes anterior"
+      ],
+      "respuesta": "Revisé tus periodos y {explicacion_variacion}. Si quieres, te envío el detalle por correo. Si no reconoces ese servicio o no estás de acuerdo con su alta, lo registro y lo derivo a tu ejecutivo de cuenta.",
+      "requiere_verificacion": true,
+      "herramientas": ["detectar_anomalias", "obtener_factura", "obtener_servicios"],
+      "derivar_a": "ejecutivo_de_cuenta",
+      "casuistica_relacionada": ["CS-09"],
+      "notas": "Se activa con un cambio mayor al 25 % entre periodos consecutivos. Si la causa es un servicio nuevo, es una explicación: no se crea ajuste ni se deriva sin necesidad."
+    },
+    {
+      "id": "fac-005",
+      "categoria": "facturacion",
+      "intencion": "estado_factura_saldo",
+      "pregunta": "¿Cuál es el estado de mi factura? ¿Está vencida?",
+      "variantes": [
+        "¿Tengo facturas pendientes?",
+        "Consulta de saldo",
+        "¿Mi factura de octubre figura como vencida?",
+        "¿Cuándo vence mi factura?"
+      ],
+      "respuesta": "Tu factura {numero_factura} del periodo {periodo} por {total_con_igv} (con IGV) tiene vencimiento el {fecha_vencimiento} y figura como {estado}. Para temas de cobranza o plazos de pago, te derivo con tu ejecutivo de cuenta.",
+      "requiere_verificacion": true,
+      "herramientas": ["obtener_factura"],
+      "derivar_a": "ejecutivo_de_cuenta",
+      "casuistica_relacionada": ["CS-11"],
+      "notas": "Distinguir facturas pagadas, emitidas y vencidas. No inventar fechas de pago ni intereses. No hablar de cobranza ni de plazos de pago."
+    },
+    {
+      "id": "fac-006",
+      "categoria": "facturacion",
+      "intencion": "catalogo_servicios",
+      "pregunta": "¿Qué servicios y niveles de servicio (SLA) manejan?",
+      "variantes": [
+        "¿Cuáles son los servicios del catálogo?",
+        "¿Qué SLA tiene mi servicio?",
+        "¿Cuántos GB incluye mi línea móvil?"
+      ],
+      "respuesta": "El catálogo incluye: Internet dedicado 500 Mbps (SLA 99,5 %), Enlace MPLS (SLA 99,7 %), Troncal SIP (SLA 99,5 %) y Móvil corporativo (10 GB incluidos por línea; el exceso se cobra a S/ 2,00 por GB). La tarifa y el SLA aplicables a tu empresa son los de tu contrato; si quieres, consulto tus servicios contratados.",
+      "requiere_verificacion": false,
+      "herramientas": ["obtener_servicios"],
+      "derivar_a": null,
+      "casuistica_relacionada": ["CS-04", "CS-05", "CS-07"]
+    },
+
+    {
+      "id": "aju-001",
+      "categoria": "ajustes",
+      "intencion": "politica_tramos",
+      "pregunta": "¿Quién aprueba un ajuste o una nota de crédito según el monto?",
+      "variantes": [
+        "¿Qué son los tramos?",
+        "¿Por qué mi ajuste necesita aprobación?",
+        "¿Quién decide si me corrigen la factura?"
+      ],
+      "respuesta": "Depende del monto sin IGV del ajuste. Hasta S/ 100 es automático. Más de S/ 100 y hasta S/ 1 000 lo aprueba tu ejecutivo de cuenta. Más de S/ 1 000 y hasta S/ 50 000 lo aprueba la jefatura de facturación. Sobre S/ 50 000 lo evalúan gerencia y finanzas. En los casos que requieren aprobación preparo el sustento y lo envío, pero no puedo asegurarte el resultado.",
+      "requiere_verificacion": false,
+      "herramientas": ["calcular_ajuste"],
+      "derivar_a": null,
+      "casuistica_relacionada": ["CS-01", "CS-02", "CS-03", "CS-04", "CS-05", "CS-07"],
+      "notas": "El tramo lo calcula la función calcular_ajuste, no el modelo."
+    },
+    {
+      "id": "aju-002",
+      "categoria": "ajustes",
+      "intencion": "ajuste_automatico",
+      "pregunta": "¿Cuándo se emite una nota de crédito de forma automática?",
+      "variantes": [
+        "¿Me pueden corregir el monto sin aprobación?",
+        "¿Los ajustes pequeños también esperan aprobación?"
+      ],
+      "respuesta": "Los ajustes de hasta S/ 100 sin IGV corresponden al tramo automático. Cuando es posible, emito la nota de crédito o débito y te aviso; cuando no, registro el caso y lo derivo a tu ejecutivo para que la emita.",
+      "variantes_por_opcion": {
+        "A": "Registro el caso, te informo el descuento que corresponde y lo derivo a tu ejecutivo de cuenta para que emita la nota.",
+        "B": "Emito la nota de crédito automática por {monto_sin_igv} (con IGV: {monto_con_igv}) y te lo comunico."
+      },
+      "requiere_verificacion": true,
+      "herramientas": ["calcular_ajuste", "proponer_ajuste", "registrar_caso"],
+      "derivar_a": "ejecutivo_de_cuenta",
+      "casuistica_relacionada": ["CS-07"],
+      "notas": "En la opción B el ajuste de tramo 1 queda en estado aplicado, sin aprobador. Redondear a dos decimales y calcular IGV."
+    },
+    {
+      "id": "aju-003",
+      "categoria": "ajustes",
+      "intencion": "promesa_devolucion",
+      "pregunta": "¿Me van a devolver el dinero? ¿Cuándo?",
+      "variantes": [
+        "¿Me garantizas que me corrigen la factura?",
+        "¿Cuánto demora la devolución?",
+        "¿Ya está aprobado mi ajuste?"
+      ],
+      "respuesta": "Ya registré tu caso ({numero_caso}) y lo envié al área responsable, que revisará el sustento y se comunicará contigo con la solución. Yo no puedo asegurarte el resultado ni los plazos de esa revisión.",
+      "requiere_verificacion": true,
+      "herramientas": ["registrar_caso"],
+      "derivar_a": "area_responsable_del_tramo",
+      "casuistica_relacionada": ["CS-01", "CS-02", "CS-03"],
+      "notas": "No usar expresiones como \"te vamos a devolver\" ni prometer anulaciones. Aplica especialmente a los tramos 2 a 4."
+    },
+    {
+      "id": "aju-004",
+      "categoria": "ajustes",
+      "intencion": "factura_duplicada",
+      "pregunta": "Creo que me facturaron dos veces lo mismo",
+      "variantes": [
+        "Tengo una factura duplicada",
+        "Me llegaron dos facturas por el mismo monto",
+        "¿Hay facturas repetidas?"
+      ],
+      "respuesta": "Encontré dos facturas por el mismo importe en el periodo {periodo}: {numero_factura_1} y {numero_factura_2}. Ya registré el caso y lo escalé al área responsable; te escribirán con la solución. Número de caso: {numero_caso}.",
+      "variantes_por_opcion": {
+        "A": "Registro el caso y lo derivo a tu ejecutivo de cuenta con los números de ambas facturas.",
+        "B": "Armo el sustento (facturas, periodo, importe y nota de crédito sugerida) y lo escalo según el tramo que corresponda."
+      },
+      "requiere_verificacion": true,
+      "herramientas": ["detectar_anomalias", "calcular_ajuste", "registrar_caso", "notificar"],
+      "derivar_a": "gerencia_y_finanzas",
+      "casuistica_relacionada": ["CS-01"],
+      "notas": "Solo se marca como duplicada si coinciden cliente, periodo e importe y ambas están sin anular. Si el monto supera S/ 50 000 sin IGV es tramo 4: el caso se crea como escalado y no se promete la anulación."
+    },
+    {
+      "id": "aju-005",
+      "categoria": "ajustes",
+      "intencion": "servicio_baja_facturado",
+      "pregunta": "Di de baja un servicio y me lo siguen facturando",
+      "variantes": [
+        "Cancelé un enlace pero aparece en mi factura",
+        "Me cobran un servicio que ya no tengo",
+        "¿Por qué sigo pagando algo que di de baja?"
+      ],
+      "respuesta": "Revisé el servicio {servicio}: figura de baja desde el {fecha_baja} y aparece facturado en {periodos_facturados}. Preparé la corrección y está en revisión.",
+      "variantes_por_opcion": {
+        "A": "Te confirmo la fecha de baja, te explico que se facturó después y derivo el caso a tu ejecutivo de cuenta.",
+        "B": "Propongo una nota de crédito por los periodos posteriores a la baja y la envío a la aprobación correspondiente. Te informo que está en revisión."
+      },
+      "requiere_verificacion": true,
+      "herramientas": ["obtener_servicios", "detectar_anomalias", "calcular_ajuste", "proponer_ajuste", "registrar_caso"],
+      "derivar_a": "jefatura_de_facturacion",
+      "casuistica_relacionada": ["CS-02"],
+      "notas": "Se suman solo los periodos posteriores a la baja (no el periodo de la baja). El ajuste queda propuesto hasta que lo apruebe la instancia del tramo."
+    },
+    {
+      "id": "aju-006",
+      "categoria": "ajustes",
+      "intencion": "tarifa_distinta_pactada",
+      "pregunta": "Me cobran una tarifa distinta a la de mi contrato",
+      "variantes": [
+        "La factura tiene un precio mayor al pactado",
+        "Mi tarifa no coincide con el contrato",
+        "Me están cobrando de más por enlace"
+      ],
+      "respuesta": "Tu contrato indica {tarifa_pactada} por {unidad} y la factura cobra {tarifa_facturada}. La diferencia de los periodos afectados es {monto_total_diferencia} y ya está en revisión.",
+      "variantes_por_opcion": {
+        "A": "Te muestro la tarifa pactada y la facturada, y derivo el caso a tu ejecutivo de cuenta.",
+        "B": "Propongo una nota de crédito por la diferencia de los periodos afectados y la envío a la instancia que corresponda."
+      },
+      "requiere_verificacion": true,
+      "herramientas": ["obtener_servicios", "obtener_factura", "detectar_anomalias", "calcular_ajuste", "proponer_ajuste"],
+      "derivar_a": "jefatura_de_facturacion",
+      "casuistica_relacionada": ["CS-03"],
+      "notas": "Calcular la diferencia por periodo y el total con la función, sin intervención del modelo. No marcar periodos correctos. Mostrar ambas tarifas con el mismo formato monetario."
+    },
+    {
+      "id": "aju-007",
+      "categoria": "ajustes",
+      "intencion": "exceso_consumo_movil",
+      "pregunta": "Me cobraron un exceso de datos móviles que no consumí",
+      "variantes": [
+        "¿Por qué hay cobro por GB adicional?",
+        "No hubo exceso de consumo y me lo cobraron",
+        "Explícame el cobro de exceso de mis líneas"
+      ],
+      "respuesta": "El consumo de {periodo} no registra exceso, pero la factura cobra {gb_exceso} GB. Envié la corrección a tu ejecutivo para su aprobación.",
+      "variantes_por_opcion": {
+        "A": "Te explico que el consumo registrado no muestra exceso y derivo el caso a tu ejecutivo de cuenta.",
+        "B": "Propongo la nota de crédito por el exceso cobrado y la envío a tu ejecutivo para su aprobación."
+      },
+      "requiere_verificacion": true,
+      "herramientas": ["obtener_factura", "detectar_anomalias", "calcular_ajuste", "proponer_ajuste"],
+      "derivar_a": "ejecutivo_de_cuenta",
+      "casuistica_relacionada": ["CS-04"],
+      "notas": "Si el consumo coincide con la línea de exceso, el cobro es legítimo: se explica y no se acredita. Tramo 2 exige aprobación humana antes de aplicar."
+    },
+
+    {
+      "id": "sla-001",
+      "categoria": "averias_sla",
+      "intencion": "compensacion_por_averia",
+      "pregunta": "Tuve una avería, ¿me corresponde alguna compensación?",
+      "variantes": [
+        "Mi enlace estuvo caído, ¿qué descuento me dan?",
+        "Se cayó el servicio por varias horas",
+        "¿Cumplieron el SLA?",
+        "¿Cómo se calcula el descuento por caída?"
+      ],
+      "respuesta": "Reviso las horas de caída de tu servicio y las comparo con la tolerancia de tu SLA. La compensación es: tarifa pactada × unidades afectadas × horas fuera de tolerancia ÷ 720, y la tolerancia en horas es (1 − SLA pactado) × 720. Solo cuenta lo que excede la tolerancia. En tu caso, la avería de {servicio} duró {horas_caida} horas; las horas fuera de tolerancia son {horas_fuera} y la compensación es {monto_sin_igv} sin IGV ({monto_con_igv} con IGV).",
+      "variantes_por_opcion": {
+        "A": "Te informo las horas de caída y que corresponde evaluar una compensación; derivo el caso a tu ejecutivo de cuenta.",
+        "B": "Propongo la nota de crédito con el detalle del cálculo. Si el monto es hasta S/ 100 sin IGV, se emite automáticamente; si es mayor, la envío a la instancia que corresponda."
+      },
+      "requiere_verificacion": true,
+      "herramientas": ["obtener_servicios", "detectar_anomalias", "calcular_ajuste", "proponer_ajuste"],
+      "derivar_a": "ejecutivo_de_cuenta",
+      "casuistica_relacionada": ["CS-05", "CS-07"],
+      "notas": "Usar siempre la tolerancia del contrato del servicio, no un valor fijo. Una avería ya compensada no vuelve a aparecer. Resultado con dos decimales."
+    },
+    {
+      "id": "sla-002",
+      "categoria": "averias_sla",
+      "intencion": "ejemplo_calculo_sla",
+      "pregunta": "¿Me puedes dar un ejemplo de cómo se calcula la compensación por SLA?",
+      "variantes": [
+        "Explícame el cálculo con números",
+        "¿Cómo sale ese descuento?"
+      ],
+      "respuesta": "Ejemplo ilustrativo: un enlace con SLA 99,7 % y tarifa de S/ 12 000,00 estuvo caído 30 horas. La tolerancia es 0,003 × 720 = 2,16 h, así que las horas fuera son 30 − 2,16 = 27,84 h. La compensación es 12 000 × 1 × 27,84 ÷ 720 = S/ 464,00 sin IGV. Si quieres, calculo tu caso con los datos reales de tu servicio.",
+      "requiere_verificacion": false,
+      "herramientas": [],
+      "derivar_a": null,
+      "casuistica_relacionada": ["CS-05"],
+      "notas": "Es un ejemplo del documento de casuísticas. Para un cliente real, el cálculo lo hace calcular_ajuste."
+    },
+
+    {
+      "id": "sol-001",
+      "categoria": "solicitudes",
+      "intencion": "solicitud_demorada",
+      "pregunta": "Hice una solicitud hace semanas y no la atienden",
+      "variantes": [
+        "¿Cómo va mi solicitud?",
+        "Mi pedido sigue abierto",
+        "Quiero reclamar por la demora en mi solicitud",
+        "¿Cuál es el plazo de atención?"
+      ],
+      "respuesta": "El plazo de atención de las solicitudes es de 10 días. Tu solicitud de {tipo_solicitud}, registrada el {fecha_registro}, sigue {estado} y lleva {dias_abiertos} días. Ya avisé al responsable y a tu ejecutivo de cuenta para que le den atención.",
+      "variantes_por_opcion": {
+        "A": "Te informo el estado y los días transcurridos, y aviso al responsable y a tu ejecutivo de cuenta.",
+        "B": "Hago lo mismo y, si reclamas por el retraso, puedo ofrecerte el gesto comercial cuando corresponda (ver com-001)."
+      },
+      "requiere_verificacion": true,
+      "herramientas": ["consultar_solicitudes", "registrar_caso", "notificar"],
+      "derivar_a": "responsable_y_ejecutivo",
+      "casuistica_relacionada": ["CS-06"],
+      "notas": "El plazo se mide contra la fecha de sistema. No marcar como vencidas las solicitudes en proceso dentro del plazo ni las cerradas. No genera nota de crédito."
+    },
+
+    {
+      "id": "com-001",
+      "categoria": "gesto_comercial",
+      "intencion": "gesto_comercial",
+      "pregunta": "¿Puedo recibir un gesto comercial por una mala experiencia?",
+      "variantes": [
+        "¿Me pueden dar un descuento por la demora?",
+        "Quiero una compensación por el mal servicio",
+        "Pido otro gesto comercial este mes"
+      ],
+      "respuesta": "Puedo aplicar un gesto comercial de hasta S/ 100 sin IGV, un gesto por cliente y por mes. Si ya recibiste uno este mes o el monto que pides es mayor, no puedo aplicarlo, pero registro tu pedido y lo derivo a tu ejecutivo de cuenta.",
+      "variantes_por_opcion": {
+        "A": "No aplico gestos comerciales: registro tu pedido y lo derivo a tu ejecutivo de cuenta.",
+        "B": "Aplico el primer gesto del mes dentro del límite. Ante un segundo pedido en el mes lo rechazo, te explico el motivo y ofrezco derivarlo a tu ejecutivo."
+      },
+      "requiere_verificacion": true,
+      "herramientas": ["detectar_anomalias", "proponer_ajuste", "registrar_caso"],
+      "derivar_a": "ejecutivo_de_cuenta",
+      "casuistica_relacionada": ["CS-08"],
+      "por_validar": true,
+      "notas": "Política P6, por validar con el negocio. Solo en la opción B. El segundo pedido queda como caso cerrado con el sustento \"rechazado por P6\". Un gesto mayor a S/ 100 no se aplica y pasa al tramo que le corresponda."
+    },
+
+    {
+      "id": "der-001",
+      "categoria": "derivacion",
+      "intencion": "numero_de_caso_seguimiento",
+      "pregunta": "¿Qué es el número de caso y qué pasa después de que lo registran?",
+      "variantes": [
+        "¿Cómo hago seguimiento a mi caso?",
+        "¿Quién se va a comunicar conmigo?",
+        "¿Qué sigue ahora?"
+      ],
+      "respuesta": "El número de caso identifica tu consulta o reclamo. Cuando registro un caso, envío un aviso por correo a quien corresponde según el tramo (ejecutivo de cuenta, jefatura de facturación o gerencia y finanzas) con el sustento. Esa persona se comunicará contigo con la solución.",
+      "requiere_verificacion": false,
+      "herramientas": ["registrar_caso", "notificar"],
+      "derivar_a": null,
+      "casuistica_relacionada": ["CS-01", "CS-06", "CS-13"]
+    },
+    {
+      "id": "der-002",
+      "categoria": "derivacion",
+      "intencion": "hablar_con_ejecutivo",
+      "pregunta": "Quiero hablar con mi ejecutivo de cuenta",
+      "variantes": [
+        "Pásame con una persona",
+        "Necesito un asesor",
+        "Quiero que me contacte mi ejecutivo"
+      ],
+      "respuesta": "Claro. Registro tu solicitud y la derivo a tu ejecutivo de cuenta para que se comunique contigo. ¿Quieres que incluya algún detalle en el mensaje?",
+      "requiere_verificacion": true,
+      "herramientas": ["registrar_caso", "notificar"],
+      "derivar_a": "ejecutivo_de_cuenta",
+      "casuistica_relacionada": ["CS-13"]
+    },
+
+    {
+      "id": "fa-001",
+      "categoria": "fuera_de_alcance",
+      "intencion": "renegociar_tarifa",
+      "pregunta": "Quiero que me bajen la tarifa para el próximo año",
+      "variantes": [
+        "¿Pueden darme un mejor precio?",
+        "Quiero renegociar mi contrato",
+        "Mi tarifa es muy alta, ¿se puede reducir?",
+        "¿Me hacen un descuento por todo el año?"
+      ],
+      "respuesta": "Esa gestión no la puedo realizar: no negocio ni opino sobre tarifas. Registré tu pedido y lo derivé a tu ejecutivo de cuenta, quien se comunicará contigo. Número de caso: {numero_caso}.",
+      "requiere_verificacion": true,
+      "herramientas": ["registrar_caso", "notificar"],
+      "derivar_a": "ejecutivo_de_cuenta",
+      "casuistica_relacionada": ["CS-13"],
+      "notas": "El caso se crea como derivado con el pedido textual del cliente."
+    },
+    {
+      "id": "fa-002",
+      "categoria": "fuera_de_alcance",
+      "intencion": "temas_legales_o_pagos",
+      "pregunta": "¿Puedo pagar en cuotas? ¿Qué pasa legalmente si no pago?",
+      "variantes": [
+        "Quiero fraccionar el pago",
+        "¿Me cobrarán intereses o mora?",
+        "Voy a demandar por el cobro indebido",
+        "¿Cómo pago mi factura?"
+      ],
+      "respuesta": "Los temas legales y de pagos no los gestiono. Puedo derivarlos a tu ejecutivo de cuenta para que te oriente. ¿Quieres que registre tu consulta?",
+      "requiere_verificacion": false,
+      "herramientas": ["registrar_caso"],
+      "derivar_a": "ejecutivo_de_cuenta",
+      "casuistica_relacionada": ["CS-11", "CS-13"],
+      "notas": "No inventar fechas de pago, intereses ni condiciones."
+    }
+  ],
+  "fallback": {
+    "fuera_de_alcance_general": "Eso está fuera de lo que puedo gestionar. Puedo ayudarte con consultas de facturación, revisión de cobros, compensaciones por averías y estado de solicitudes. Si lo prefieres, registro tu consulta y la derivo a tu ejecutivo de cuenta.",
+    "no_entendi": "No estoy seguro de haber entendido tu consulta. ¿Podrías contarme con más detalle qué necesitas revisar de tu facturación?",
+    "error_herramienta": "En este momento no pude consultar la información en el sistema. Prefiero no darte datos que no pueda verificar; intenta nuevamente en unos minutos o contacta a tu ejecutivo de cuenta."
+  }
+}
