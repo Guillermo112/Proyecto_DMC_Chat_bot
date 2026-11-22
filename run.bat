@@ -20,6 +20,7 @@ rem ENTORNO se lee igual que la app (variable del sistema o .env)
 for /f "delims=" %%e in ('%VPY% -c "from app import config; print(config.ENTORNO)"') do set "ENTORNO_APP=%%e"
 
 echo === API Anticipa en http://127.0.0.1:%PUERTO% ===
+echo   Chat:               http://127.0.0.1:%PUERTO%/chat
 echo   Documentacion:      http://127.0.0.1:%PUERTO%/docs
 if /i "%ENTORNO_APP%"=="dev" (
     echo   Banco de pruebas:   http://127.0.0.1:%PUERTO%/dev/rag
