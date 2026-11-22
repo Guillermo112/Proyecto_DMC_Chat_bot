@@ -51,9 +51,13 @@ def test_sin_modelo_sale_con_2(monkeypatch, capsys):
             raise agente.ChatNoDisponible("No hay ningún endpoint configurado.")
 
     monkeypatch.setattr(agente, "ServicioChat", lambda: SinModelo())
+    import logging
+
     db_real = config.DB_PATH
+    nivel = logging.getLogger("app.rag").level
     try:
         assert pc.main(["CS-01"]) == 2
     finally:
         config.DB_PATH = db_real  # main apunta la config a una copia temporal
+        logging.getLogger("app.rag").setLevel(nivel)  # y silencia el log del RAG
     assert "no está disponible" in capsys.readouterr().out
