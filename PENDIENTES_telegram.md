@@ -7,6 +7,10 @@ PR contra `develop`.
 del chat web (`/chat`): mismo turno (RAG previo + herramientas), misma identificación
 (RUC + código OTP al correo) y los casos registrados con `canal = telegram`.
 
+**Reglas de seguridad:** [`docs/telegram_seguridad.md`](docs/telegram_seguridad.md).
+Cada paso del plan debe cumplir las reglas que le tocan (están numeradas y dicen en qué
+paso se implementan); al terminar un paso, marcarlas ✅ allí.
+
 ## Decisiones tomadas
 
 - **El bot llama a `ServicioChat` en el mismo proceso**, no a `POST /mi/chat` por HTTP.
@@ -44,7 +48,10 @@ del chat web (`/chat`): mismo turno (RAG previo + herramientas), misma identific
    valida el canal contra `Canal` y lo usa en `registrar_caso`; el que mande el modelo se
    ignora. `ServicioChat.responder(..., canal="web")` lo pasa a las herramientas y al log
    `chat.turno`. La web no cambia. Tests en `test_herramientas.py` y `test_chat.py`.
-2. [ ] **Configuración** (tabla de arriba) y `.env.example`.
+2. [x] **Configuración** (hecho): las variables de la tabla en `app/config.py` y
+   `.env.example`. `TELEGRAM_USUARIOS_PERMITIDOS` mal escrita es un error al arrancar (si
+   se saltara, una lista que queda vacía abriría el bot a cualquiera). Tests en
+   `tests/test_config_telegram.py`.
 3. [ ] **Sesiones del bot** (`app/telegram/sesiones.py`): máquina de estados por `chat_id`,
    sin red ni Telegram, fácil de probar.
    - `sin_identificar` → pide el RUC (11 dígitos) → `otp.solicitar_codigo(ruc)`.
