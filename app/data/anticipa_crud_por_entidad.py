@@ -381,32 +381,8 @@ class AjusteCRUD(BaseEntityCRUD):
             "estado": "aplicado", "fecha_aplicacion": fecha_aplicacion})
 
 
-class VerificacionCRUD(BaseEntityCRUD):
-    tabla, pk = "verificacion", "id_verificacion"
-    columnas = ("id_cliente", "ruc_ingresado", "codigo_hash", "fecha_envio",
-                "fecha_expira", "intentos", "estado")
-    permite_delete_fisico = False
-
-    def obtener_ultima_por_ruc(self, ruc):
-        return self._one(
-            """SELECT * FROM verificacion WHERE ruc_ingresado=?
-               ORDER BY id_verificacion DESC LIMIT 1""", (ruc,))
-
-    def incrementar_intentos(self, verificacion_id):
-        count, _ = self._run(
-            """UPDATE verificacion SET intentos=intentos+1
-               WHERE id_verificacion=?""", (verificacion_id,))
-        return count > 0
-
-    def bloquear(self, verificacion_id):
-        return self.actualizar(verificacion_id, {"estado": "bloqueado"})
-
-    def validar_vigencia(self, verificacion_id, ahora_iso):
-        return self._one(
-            """SELECT id_verificacion FROM verificacion
-               WHERE id_verificacion=? AND fecha_expira>=?
-               AND intentos<3 AND estado NOT IN ('bloqueado','expirado')""",
-            (verificacion_id, ahora_iso)) is not None
+# La tabla `verificacion` no tiene CRUD a propósito: solo la maneja app/auth/otp.py
+# (con transacción y bloqueo de intentos). No agregar aquí un VerificacionCRUD.
 
 
 class InteraccionLogCRUD(BaseEntityCRUD):
@@ -465,7 +441,6 @@ averia_crud = AveriaCRUD()
 solicitud_crud = SolicitudCRUD()
 caso_crud = CasoCRUD()
 ajuste_crud = AjusteCRUD()
-verificacion_crud = VerificacionCRUD()
 interaccion_log_crud = InteraccionLogCRUD()
 politica_tramo_crud = PoliticaTramoCRUD()
 parametro_crud = ParametroCRUD()
