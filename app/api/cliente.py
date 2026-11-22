@@ -49,6 +49,11 @@ def mi_perfil(cliente_id: int = Depends(cliente_actual)):
 @router.get("/facturas", response_model=PaginaFacturas)
 def mis_facturas(
     cliente_id: int = Depends(cliente_actual),
+    periodo: str | None = Query(
+        None,
+        pattern=r"^[0-9]{4}-(0[1-9]|1[0-2])$",
+        description="Mes facturado (AAAA-MM). La factura de 2026-09 se emite el 2026-10-01",
+    ),
     fecha_desde: date | None = Query(None, description="Emisión desde (AAAA-MM-DD)"),
     fecha_hasta: date | None = Query(None, description="Emisión hasta (AAAA-MM-DD)"),
     estado: EstadoFactura | None = None,
@@ -56,7 +61,9 @@ def mis_facturas(
     offset: int = Query(0, ge=0),
 ):
     """Facturas propias, de la más reciente a la más antigua, paginadas."""
-    return _400(facturacion.listar_facturas, cliente_id, fecha_desde, fecha_hasta, estado, limite, offset)
+    return _400(
+        facturacion.listar_facturas, cliente_id, fecha_desde, fecha_hasta, estado, limite, offset, periodo=periodo
+    )
 
 
 @router.get("/facturas/{numero}", response_model=FacturaDetalle, responses={404: {"description": "No existe o no es tuya"}})

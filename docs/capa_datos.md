@@ -32,20 +32,23 @@ Datos del cliente y de su ejecutivo de cuenta.
 - **Uso en el agente:** saludar al cliente y derivar al ejecutivo
   (CS-06, CS-11, CS-13).
 
-### `listar_facturas(cliente_id, fecha_desde=None, fecha_hasta=None, estado=None, limite=None, offset=0) -> PaginaFacturas`
+### `listar_facturas(cliente_id, fecha_desde=None, fecha_hasta=None, estado=None, limite=None, offset=0, *, periodo=None) -> PaginaFacturas`
 
 Facturas del cliente, de la más reciente a la más antigua.
 
 - **Tablas:** `factura`.
-- **Filtros:** `fecha_desde` / `fecha_hasta` sobre `fecha_emision` (inclusive);
+- **Filtros:** `periodo` (`AAAA-MM`, mes facturado; solo por nombre);
+  `fecha_desde` / `fecha_hasta` sobre `fecha_emision` (inclusive);
   `estado` ∈ `emitida`, `pagada`, `vencida`, `en_disputa`, `anulada`.
+  Se combinan con AND.
 - **Paginación:** `limite` (por defecto 20, máximo 100) y `offset`.
 - **Devuelve:** `items` (cabeceras), `total` (filas que cumplen el filtro),
   `limite` aplicado y `offset`.
-- **Errores:** `ValueError` por estado o `cliente_id` inválidos.
+- **Errores:** `ValueError` por estado, periodo o `cliente_id` inválidos.
 - **Nota:** la facturación es mes vencido; la factura del periodo `2026-10`
-  se emite el `2026-11-01`. Para "la factura de octubre" filtrar por
-  emisión en noviembre, o usar el campo `periodo` del resultado.
+  se emite el `2026-11-01`. Para "la factura de octubre" usar
+  `periodo="2026-10"`, no un rango de emisión. Un periodo puede tener más de
+  una factura vigente (duplicado de CS-01).
 
 ### `detalle_factura(cliente_id, numero) -> FacturaDetalle | None`
 

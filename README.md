@@ -116,7 +116,7 @@ pueden pedir datos de otro cliente (`app/api/cliente.py`, sobre `app/data/factur
 | Ruta | Devuelve |
 |---|---|
 | `GET /mi/perfil` | Datos del cliente y su ejecutivo |
-| `GET /mi/facturas?fecha_desde&fecha_hasta&estado&limite&offset` | Facturas propias paginadas |
+| `GET /mi/facturas?periodo&fecha_desde&fecha_hasta&estado&limite&offset` | Facturas propias paginadas; `periodo` (AAAA-MM) es el mes facturado |
 | `GET /mi/facturas/{numero}` | Cabecera y líneas; 404 si no existe **o es de otro cliente** |
 | `GET /mi/saldo` | Saldo pendiente y notas de crédito aplicadas |
 | `GET /mi/resumen?fecha_desde&fecha_hasta` | Totales por periodo (excluye anuladas) |

@@ -50,6 +50,41 @@ def test_filtro_fechas_y_estado():
     assert [f.numero for f in vencidas.items] == ["F001-000212"]
 
 
+def test_filtro_periodo_es_el_mes_facturado():
+    """El periodo 2026-09 se emite el 2026-10-01: filtrar por periodo no por emisión."""
+    pagina = listar_facturas(7, periodo="2026-09")
+    assert [(f.numero, f.periodo, f.fecha_emision) for f in pagina.items] == [
+        ("F001-000159", "2026-09", "2026-10-01")
+    ]
+
+
+def test_filtro_periodo_con_duplicado_devuelve_ambas():
+    pagina = listar_facturas(1, periodo="2026-11")
+    assert {f.numero for f in pagina.items} == {"F001-000254", "F001-000255"}
+    assert pagina.total == 2
+
+
+def test_filtro_periodo_se_combina_con_los_demas():
+    assert listar_facturas(9, periodo="2026-10", estado="vencida").total == 1
+    assert listar_facturas(9, periodo="2026-10", estado="pagada").total == 0
+    # Periodo 2026-10 emitido en noviembre: un rango de emisión de octubre lo excluye.
+    assert listar_facturas(9, periodo="2026-10", fecha_hasta=date(2026, 10, 31)).total == 0
+
+
+def test_filtro_periodo_sin_facturas_y_aislamiento():
+    assert listar_facturas(1, periodo="2020-01").items == []
+    assert {f.numero for f in listar_facturas(2, periodo="2026-11").items}.isdisjoint(
+        {"F001-000254", "F001-000255"}
+    )
+
+
+@pytest.mark.parametrize("periodo", ["2026-13", "2026-00", "2026-1", "26-10", "2026/10", "2026-10-01",
+                                     "", "2026-10' OR '1'='1", "٢٠٢٦-١٠", 202610])
+def test_filtro_periodo_mal_formado(periodo):
+    with pytest.raises(ValueError):
+        listar_facturas(1, periodo=periodo)
+
+
 def test_detalle_factura_suma_lineas():
     det = detalle_factura(9, "f001-000212")  # normaliza mayúsculas
     assert det.total == pytest.approx(80240.0)

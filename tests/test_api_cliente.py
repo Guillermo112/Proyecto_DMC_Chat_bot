@@ -90,6 +90,25 @@ def test_resumen_requiere_fechas_y_rango_valido():
     assert r.status_code == 200 and r.json()["cantidad_facturas"] > 0
 
 
+def test_facturas_por_periodo():
+    r = api.get("/mi/facturas", params={"periodo": "2026-11"}, headers=_como(CLIENTE_1))
+    assert r.status_code == 200
+    assert {f["numero"] for f in r.json()["items"]} == {"F001-000254", "F001-000255"}
+
+
+def test_facturas_por_periodo_de_otro_cliente_no_filtra_lo_ajeno():
+    r = api.get("/mi/facturas", params={"periodo": "2026-11"}, headers=_como(CLIENTE_2))
+    assert r.status_code == 200
+    numeros = {f["numero"] for f in r.json()["items"]}
+    assert numeros <= _numeros_de(CLIENTE_2) and not numeros & _numeros_de(CLIENTE_1)
+
+
+@pytest.mark.parametrize("periodo", ["2026-13", "2026-1", "2026-10-01", "x' OR '1'='1"])
+def test_periodo_mal_formado_es_422(periodo):
+    r = api.get("/mi/facturas", params={"periodo": periodo}, headers=_como(CLIENTE_1))
+    assert r.status_code == 422
+
+
 def test_estado_invalido_es_422():
     r = api.get("/mi/facturas", params={"estado": "x' OR '1'='1"}, headers=_como(CLIENTE_1))
     assert r.status_code == 422

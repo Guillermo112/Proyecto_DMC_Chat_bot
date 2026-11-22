@@ -5,6 +5,7 @@ Reglas:
   fragmentos SQL fijos, nunca valores concatenados.
 - Toda función recibe `cliente_id` y lo aplica en el WHERE.
 """
+import re
 from datetime import date
 from pathlib import Path
 
@@ -24,6 +25,7 @@ from app.schemas import (
 
 ESTADOS_FACTURA = {"emitida", "pagada", "vencida", "en_disputa", "anulada"}
 ESTADOS_PENDIENTES = ("emitida", "vencida", "en_disputa")
+_PATRON_PERIODO = re.compile(r"[0-9]{4}-(0[1-9]|1[0-2])")  # [0-9], no \d: \d acepta dígitos Unicode
 
 _COLUMNAS_FACTURA = """
     f.id_factura, f.numero, f.periodo, f.fecha_emision, f.fecha_vencimiento,
@@ -43,6 +45,13 @@ def _fecha_iso(valor: date | None) -> str | None:
     if not isinstance(valor, date):
         raise ValueError("Las fechas deben ser datetime.date")
     return valor.isoformat()
+
+
+def _validar_periodo(periodo: str) -> str:
+    """Periodo facturado en formato AAAA-MM (mes 01 a 12)."""
+    if not isinstance(periodo, str) or not _PATRON_PERIODO.fullmatch(periodo.strip()):
+        raise ValueError("periodo debe tener el formato AAAA-MM, p. ej. '2026-10'")
+    return periodo.strip()
 
 
 def _fecha_actual(con) -> str:
@@ -78,9 +87,17 @@ def listar_facturas(
     limite: int | None = None,
     offset: int = 0,
     db_path: Path | None = None,
+    *,
+    periodo: str | None = None,
 ) -> PaginaFacturas:
-    """Facturas del cliente filtradas por fecha de emisión y estado, paginadas."""
+    """Facturas del cliente filtradas por periodo, fecha de emisión y estado, paginadas.
+
+    `periodo` (AAAA-MM) es el mes facturado, no el de emisión: la factura de
+    2026-09 se emite el 2026-10-01. Se combina con los demás filtros (AND).
+    """
     _validar_cliente_id(cliente_id)
+    if periodo is not None:
+        periodo = _validar_periodo(periodo)
     if estado is not None and estado not in ESTADOS_FACTURA:
         raise ValueError(f"Estado inválido. Permitidos: {sorted(ESTADOS_FACTURA)}")
     limite = config.LIMITE_POR_DEFECTO if limite is None else limite
@@ -89,6 +106,9 @@ def listar_facturas(
 
     condiciones = ["f.id_cliente = ?"]
     params: list = [cliente_id]
+    if periodo is not None:
+        condiciones.append("f.periodo = ?")
+        params.append(periodo)
     if fecha_desde is not None:
         condiciones.append("f.fecha_emision >= ?")
         params.append(_fecha_iso(fecha_desde))
