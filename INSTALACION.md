@@ -1,7 +1,11 @@
 # Instalación en un clic (`install.bat` y `run.bat`)
 
 `install.bat` deja el entorno de desarrollo listo en Windows con un doble clic;
-`run.bat` levanta la API. Ambos están en la raíz del repositorio.
+`run.bat` levanta la API y `regenerar_base.bat` recrea la base con los correos del
+`.env`. Los tres están en la raíz del repositorio.
+
+> **Para usarlos, la guía es el [README](README.md)** (qué ejecutar y cuándo, qué poner
+> en `.env`). Este documento explica cómo están hechos y por qué.
 
 ## Requisitos previos (no los instala el `.bat`)
 - **Git** (para clonar el repositorio).
@@ -67,10 +71,24 @@ Lo que el script muestra al terminar:
 - Levanta `uvicorn app.main:app` sin `--reload`. Para desarrollar con recarga:
   `.venv\Scripts\python -m uvicorn app.main:app --reload`.
 
+## `regenerar_base.bat`
+
+Existe porque `install.bat` crea la base **antes** de que cada integrante ponga su
+correo en `CORREO_PRUEBA_n`, y volver a ejecutar `install.bat` no la recrea (ya existe).
+
+- Pide confirmación con `choice` (S/N): borra la base y los casos registrados al probar.
+  `REGENERAR_SIN_CONFIRMAR=1` la omite (pruebas automáticas).
+- Ejecuta `db\generar_datos.py` (acepta `--publico`) y guarda su salida en
+  `db\generar_datos.log` (ignorado por git); solo la muestra si falla.
+- Si la base está en uso (`run.bat` abierto), `generar_datos.py` falla con
+  `PermissionError` y el `.bat` lo explica.
+- Al terminar lista los clientes 1 a 13 con RUC y correo, para probar el OTP.
+
 ## Pendiente (para trabajar luego)
 - [x] `install.bat` en la raíz, probado en una copia limpia sin `.venv`, `.env` ni base.
 - [x] `run.bat` que levanta la API usando `.venv`.
+- [x] `regenerar_base.bat`, probado: generación, cancelación y base en uso.
+- [x] README como guía de uso: objetivo, scripts, primera vez y "cuándo hacer qué".
 - [ ] Revisar la redacción de la indicación final y las variables que se piden.
-- [ ] Actualizar la sección "Instalación" del README para apuntar a `install.bat`.
 - [ ] Cuando existan `ENTORNO` y el límite por IP (pasos 4 y 5 de `PENDIENTES_auth.md`),
       decidir si el `.bat` debe avisar algo sobre ellos (tienen valores por defecto).

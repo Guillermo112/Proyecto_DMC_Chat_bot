@@ -67,18 +67,20 @@ echo [9/9] Ejecutando pruebas...
 
 echo.
 echo ============================================================
-echo  Entorno listo. Falta completar .env con tus datos:
+echo  Entorno listo. Paso siguiente: completa .env con tus datos:
 echo   - SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_REMITENTE
 echo     (correo que envia el OTP; con Gmail, contrasena de aplicacion)
 echo   - CORREO_PRUEBA_n / NOMBRE_PRUEBA_n: tu correo en tu slot (1 a 5)
 echo   - LLM_BASE_URL, LLM_API_KEY, LLM_MODEL: cuando se conecte el chat
 echo.
-echo  Despues de cambiar CORREO_PRUEBA_*, regenera la base:
-echo    .venv\Scripts\python -X utf8 db\generar_datos.py
+echo  Despues, ejecuta regenerar_base.bat: la base se creo antes de
+echo  que pusieras tu correo, y sin eso el codigo OTP no te llega.
 echo.
-echo  Levantar la API:  run.bat   (otro puerto: run.bat 8001)
+echo  Luego levanta la API:  run.bat   (otro puerto: run.bat 8001)
 echo    http://127.0.0.1:8000/docs
 echo    http://127.0.0.1:8000/dev/rag   (banco de pruebas, con ENTORNO=dev)
+echo.
+echo  Guia completa ^(que hacer y cuando^): README.md
 echo ============================================================
 if not defined INSTALL_SIN_PAUSA pause
 exit /b 0
