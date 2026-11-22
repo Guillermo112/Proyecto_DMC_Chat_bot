@@ -104,6 +104,10 @@ RAG_PRECARGAR = (os.getenv("RAG_PRECARGAR") or "true").strip().lower() in ("1", 
 # Token de @BotFather. Vacío = el bot no arranca y la API queda igual. Es un secreto:
 # solo en .env. Un token admite un solo proceso leyendo mensajes (si no, Telegram da 409).
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+# Interruptor del bot. Lo enciende run_telegram.bat; run.bat lo deja apagado aunque haya
+# token, para que levantar la API (o dos APIs) no arranque bots sin querer. No lo
+# pongas en .env: run.bat lo define antes, así que ahí no tendría efecto.
+TELEGRAM_ACTIVO = (os.getenv("TELEGRAM_ACTIVO") or "").strip().lower() in ("1", "true", "si", "sí", "yes")
 
 
 def leer_ids_telegram(texto: str) -> frozenset[int]:

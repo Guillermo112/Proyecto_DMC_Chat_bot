@@ -61,14 +61,15 @@ Detalle de lo pendiente: [`PENDIENTES_rag.md`](PENDIENTES_rag.md).
 
 ## Los scripts `.bat`
 
-Cuatro scripts en la raíz, para Windows. Se ejecutan con doble clic o desde una
+Cinco scripts en la raíz, para Windows. Se ejecutan con doble clic o desde una
 terminal en la carpeta del proyecto.
 
 | Script | Objetivo | Cuándo |
 |---|---|---|
 | `install.bat` | Dejar el entorno listo: Python, dependencias, `.env`, secreto, base, índice del RAG y pruebas | La primera vez, y después de un `git pull` que cambie `requirements.txt` |
 | `regenerar_base.bat` | Borrar y volver a crear `db\anticipa.db` con los correos de tu `.env` | Después de poner tu correo en `.env`, y cuando cambie la base en el repositorio |
-| `run.bat` | Levantar la API para probarla | Cada vez que quieras usar la API o el banco de pruebas |
+| `run.bat` | Levantar la API para probarla (sin el bot de Telegram) | Cada vez que quieras usar la API o el banco de pruebas |
+| `run_telegram.bat` | Levantar la API **con** el bot de Telegram | Cuando quieras probar o mostrar el bot (necesita `TELEGRAM_BOT_TOKEN`) |
 | `clientes_prueba.bat` | Ver los RUC de prueba, su casuística y a qué correo llega el código | Cuando necesites un RUC para probar (identificación, `/docs`, el chat) |
 
 ### `install.bat`
@@ -109,9 +110,16 @@ Levanta la API en `http://127.0.0.1:8000` (o en otro puerto: `run.bat 8001`).
 - Avisa si el puerto ya está ocupado y sugiere otro.
 - Muestra las direcciones útiles: `/docs` (documentación interactiva) y, con
   `ENTORNO=dev`, `/dev/rag` (banco de pruebas del RAG).
-- Dice si el bot de Telegram está activo (hay `TELEGRAM_BOT_TOKEN`) y si responde solo a
-  la lista de usuarios permitidos o a cualquiera.
+- **No levanta el bot de Telegram**, aunque haya token en `.env`: muestra
+  `Telegram: apagado`. Así, levantar una o dos APIs para probar no arranca bots sin querer.
 - Se detiene con `Ctrl+C`.
+
+### `run_telegram.bat`
+
+Lo mismo que `run.bat` (acepta el puerto: `run_telegram.bat 8001`), pero **con el bot de
+Telegram**. Muestra si el bot quedó activo y si responde solo a la lista de usuarios
+permitidos o a cualquiera. Si otra API de tu PC ya tiene el bot de ese token, esta
+arranca sin bot y lo avisa (`Telegram: sin bot: otra API de esta PC ya lo tiene`).
 
 ### `clientes_prueba.bat`
 
@@ -347,6 +355,7 @@ python -X utf8 db/generar_datos.py   # = regenerar_base.bat (termina con validac
 python -X utf8 -m scripts.preparar_rag
 python -m pytest -q
 python -m uvicorn app.main:app       # = run.bat
+TELEGRAM_ACTIVO=1 python -m uvicorn app.main:app   # = run_telegram.bat
 ```
 
 `db/generar_datos.py` **borra la base existente** antes de recrearla y necesita
@@ -357,7 +366,7 @@ python -m uvicorn app.main:app       # = run.bat
 ## Estructura del proyecto
 
 ```
-install.bat, run.bat, regenerar_base.bat, clientes_prueba.bat   # scripts de Windows
+install.bat, run.bat, run_telegram.bat, regenerar_base.bat, clientes_prueba.bat   # scripts de Windows
 app/
   main.py        # FastAPI: /health, /auth, /mi; con ENTORNO=dev, /api y /dev/rag
   config.py      # configuración desde variables de entorno (.env)
@@ -488,8 +497,8 @@ herramientas ~1 000, historial y contexto). Una pregunta de datos usa 2 llamadas
 
 ### Bot de Telegram (`app/telegram`)
 
-El mismo agente del chat web, por Telegram. Arranca solo con la API (`run.bat`) cuando
-hay `TELEGRAM_BOT_TOKEN`; sin token, la API funciona igual. Reglas de seguridad:
+El mismo agente del chat web, por Telegram. Se levanta con `run_telegram.bat` (la API
+más el bot); `run.bat` lo deja apagado aunque haya token. Reglas de seguridad:
 [`docs/telegram_seguridad.md`](docs/telegram_seguridad.md).
 
 **Crear tu bot de prueba (una vez):**
@@ -498,12 +507,18 @@ hay `TELEGRAM_BOT_TOKEN`; sin token, la API funciona igual. Reglas de seguridad:
    termine en `bot`. Copia el token en tu `.env` como `TELEGRAM_BOT_TOKEN`.
 2. Abre **@userinfobot**, copia tu ID numérico y ponlo en `TELEGRAM_USUARIOS_PERMITIDOS`.
 3. Con el SMTP configurado y tu correo en `CORREO_PRUEBA_n`, levanta la API con
-   `run.bat`. Debe decir `Telegram: bot activo, solo usuarios de ...`.
+   `run_telegram.bat`. Debe decir `Telegram: bot activo, solo usuarios de ...`.
 
-**Cada integrante, su bot.** Un token admite un solo proceso leyendo mensajes: si dos
-personas levantan la API con el mismo token, se reparten los mensajes y la consola
-avisa `telegram.conflicto`. Para una demo compartida, una persona levanta su API y pone
-los correos y los IDs del equipo en su `.env`.
+**Un solo bot por token.** Telegram admite un solo proceso leyendo mensajes por token:
+si hay dos, se reparten los mensajes.
+
+- **En tu PC** está cubierto: solo `run_telegram.bat` enciende el bot, y un candado local
+  (un archivo bloqueado en la carpeta temporal, con un hash del token en el nombre)
+  impide que una segunda API tome el mismo token.
+- **Entre PC** no hay candado posible: **cada integrante usa su propio bot**. Si dos
+  personas usan el mismo token, la consola avisa `telegram.conflicto`. Para una demo
+  compartida, una persona levanta `run_telegram.bat` y pone los correos y los IDs del
+  equipo en su `.env`.
 
 **Conversación:**
 

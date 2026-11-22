@@ -366,6 +366,7 @@ def test_sin_token_no_arranca(monkeypatch):
     """[5.1]"""
     from app import config
 
+    monkeypatch.setattr(config, "TELEGRAM_ACTIVO", True)
     monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", "")
     antes = {t.name for t in threading.enumerate()}
     assert b.arrancar() is None
@@ -380,18 +381,20 @@ class ServicioFalso:
         pass
 
 
-def test_arranca_atiende_y_se_detiene(monkeypatch, caplog):
+def test_arranca_atiende_y_se_detiene(monkeypatch, caplog, tmp_path):
     """[5.1] [5.2] Con token arranca un solo bot por proceso; al detenerlo se puede volver a arrancar."""
     from app import config
 
+    monkeypatch.setattr(config, "TELEGRAM_ACTIVO", True)
     monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", TOKEN)
     monkeypatch.setattr(config, "TELEGRAM_USUARIOS_PERMITIDOS", frozenset({CHAT}))
     api = TelegramFalso()
     api.actualizaciones = [[_mensaje("/start"), _mensaje("/start", chat=999)]]
-    en_marcha = b.arrancar(servicio=ServicioFalso(), http=httpx.Client(transport=httpx.MockTransport(api)))
+    en_marcha = b.arrancar(servicio=ServicioFalso(), http=httpx.Client(transport=httpx.MockTransport(api)),
+                           carpeta_candado=tmp_path)
     try:
         assert en_marcha is not None and en_marcha.hilo.daemon and en_marcha.hilo.is_alive()
-        assert b.arrancar(servicio=ServicioFalso()) is None  # [5.2] segundo bot: no
+        assert b.arrancar(servicio=ServicioFalso(), carpeta_candado=tmp_path) is None  # [5.2] segundo bot
         for _ in range(200):
             if api.enviados():
                 break
@@ -403,16 +406,18 @@ def test_arranca_atiende_y_se_detiene(monkeypatch, caplog):
     finally:
         en_marcha.detener()
     assert not en_marcha.hilo.is_alive()
-    otro = b.arrancar(servicio=ServicioFalso(), http=httpx.Client(transport=httpx.MockTransport(TelegramFalso())))
+    otro = b.arrancar(servicio=ServicioFalso(), carpeta_candado=tmp_path,
+                      http=httpx.Client(transport=httpx.MockTransport(TelegramFalso())))
     assert otro is not None
     otro.detener()
 
 
-def test_sin_lista_avisa_que_responde_a_cualquiera(monkeypatch, caplog):
+def test_sin_lista_avisa_que_responde_a_cualquiera(monkeypatch, caplog, tmp_path):
     from app import config
 
+    monkeypatch.setattr(config, "TELEGRAM_ACTIVO", True)
     monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", TOKEN)
-    en_marcha = b.arrancar(servicio=ServicioFalso(),
+    en_marcha = b.arrancar(servicio=ServicioFalso(), carpeta_candado=tmp_path,
                            http=httpx.Client(transport=httpx.MockTransport(TelegramFalso())))
     en_marcha.detener()
     assert "SIN lista de usuarios permitidos" in caplog.text
@@ -449,3 +454,70 @@ def test_la_api_sin_token_funciona_igual(monkeypatch):
     with TestClient(app) as cliente:
         assert cliente.get("/health").status_code == 200
     assert b._en_marcha is None
+
+
+# -- interruptor y candado local (run_telegram.bat) ----------------------------------
+
+def test_con_token_pero_apagado_no_arranca(monkeypatch, tmp_path):
+    """run.bat deja TELEGRAM_ACTIVO apagado: tener el token no basta."""
+    from app import config
+
+    monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", TOKEN)
+    monkeypatch.setattr(config, "TELEGRAM_ACTIVO", False)
+    assert b.arrancar(servicio=ServicioFalso(), carpeta_candado=tmp_path) is None
+    assert b.estado_arranque() == "apagado"
+
+
+def test_otro_proceso_con_el_candado(monkeypatch, tmp_path, caplog):
+    """[5.2] Si otra API de esta PC tiene el candado del token, esta sigue sin bot."""
+    from app import config
+    from app.telegram.candado import CandadoLocal
+
+    monkeypatch.setattr(config, "TELEGRAM_ACTIVO", True)
+    monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", TOKEN)
+    ajeno = CandadoLocal(TOKEN, tmp_path)
+    assert ajeno.tomar()
+    try:
+        assert b.arrancar(servicio=ServicioFalso(), carpeta_candado=tmp_path) is None
+        assert "telegram.otro_proceso" in caplog.text
+    finally:
+        ajeno.soltar()
+    en_marcha = b.arrancar(servicio=ServicioFalso(), carpeta_candado=tmp_path,
+                           http=httpx.Client(transport=httpx.MockTransport(TelegramFalso())))
+    assert en_marcha is not None
+    en_marcha.detener()
+    assert ajeno.tomar()  # al detenerse, el bot soltó el candado
+    ajeno.soltar()
+
+
+@pytest.mark.parametrize("activo, token, permitidos, esperado", [
+    (False, TOKEN, frozenset(), "apagado"),
+    (True, "", frozenset(), "sin_token"),
+    (True, TOKEN, frozenset({1}), "lista"),
+    (True, TOKEN, frozenset(), "abierto"),
+])
+def test_estado_arranque(monkeypatch, tmp_path, activo, token, permitidos, esperado):
+    from app import config
+    from app.telegram import candado as c
+
+    monkeypatch.setattr(c.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(config, "TELEGRAM_ACTIVO", activo)
+    monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", token)
+    monkeypatch.setattr(config, "TELEGRAM_USUARIOS_PERMITIDOS", permitidos)
+    assert b.estado_arranque() == esperado
+
+
+def test_estado_arranque_ocupado(monkeypatch, tmp_path):
+    from app import config
+    from app.telegram import candado as c
+
+    monkeypatch.setattr(config, "TELEGRAM_ACTIVO", True)
+    monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", TOKEN)
+    monkeypatch.setattr(c.tempfile, "gettempdir", lambda: str(tmp_path))
+    ajeno = c.CandadoLocal(TOKEN)
+    assert ajeno.tomar()
+    try:
+        assert b.estado_arranque() == "ocupado"
+    finally:
+        ajeno.soltar()
+    assert b.estado_arranque() == "abierto"

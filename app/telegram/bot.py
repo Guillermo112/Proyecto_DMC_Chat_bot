@@ -16,8 +16,9 @@ números entre corchetes las citan.
 
 Las respuestas salen en HTML (negrita) y partidas en mensajes de hasta 4096
 caracteres (`app/telegram/formato.py`). `arrancar()` lo levanta en un hilo dentro de
-la API (desde el `lifespan` de `app/main.py`), solo si hay `TELEGRAM_BOT_TOKEN` [5.1]
-y una sola vez por proceso [5.2].
+la API (desde el `lifespan` de `app/main.py`), solo si hay `TELEGRAM_BOT_TOKEN` y `TELEGRAM_ACTIVO`
+(lo pone `run_telegram.bat`) [5.1], una sola vez por proceso y un solo proceso por
+token en esta PC (`app/telegram/candado.py`) [5.2].
 """
 from __future__ import annotations
 
@@ -32,6 +33,7 @@ import httpx
 
 from app import config
 from app.telegram import formato
+from app.telegram.candado import CandadoLocal
 from app.telegram.sesiones import Sesiones
 
 log = logging.getLogger(__name__)
@@ -260,6 +262,7 @@ class BotEnMarcha:
     bot: BotTelegram
     hilo: threading.Thread
     parar: threading.Event
+    candado: CandadoLocal
 
     def detener(self, espera: float = 2.0) -> None:
         global _en_marcha
@@ -267,6 +270,7 @@ class BotEnMarcha:
         # Cerrar el cliente corta la espera larga de getUpdates; el bucle ve `parar` y sale.
         self.bot.detener(esperar=False)
         self.hilo.join(timeout=espera)
+        self.candado.soltar()
         with _candado_arranque:
             if _en_marcha is self:
                 _en_marcha = None
@@ -277,16 +281,26 @@ _en_marcha: BotEnMarcha | None = None
 _candado_arranque = threading.Lock()
 
 
-def arrancar(servicio: Any = None, http: httpx.Client | None = None) -> BotEnMarcha | None:
-    """Levanta el bot en un hilo daemon. None si no hay token [5.1] o si ya está en marcha
-    en este proceso [5.2] (un token admite un solo lector)."""
+def arrancar(servicio: Any = None, http: httpx.Client | None = None,
+             carpeta_candado: Any = None) -> BotEnMarcha | None:
+    """Levanta el bot en un hilo daemon. None si está apagado o no hay token [5.1], o si
+    ya hay un lector de ese token en este proceso o en otro de esta PC [5.2]."""
     global _en_marcha
+    if not config.TELEGRAM_ACTIVO:
+        if config.TELEGRAM_BOT_TOKEN:
+            log.info("telegram.apagado: hay token pero el bot no se pidió (usa run_telegram.bat)")
+        return None
     if not config.TELEGRAM_BOT_TOKEN:
-        log.info("telegram.sin_token: el bot no arranca")
+        log.warning("telegram.sin_token: se pidió el bot pero TELEGRAM_BOT_TOKEN está vacío")
         return None
     with _candado_arranque:
         if _en_marcha is not None:
             log.warning("telegram.ya_en_marcha: no se arranca un segundo bot en este proceso")
+            return None
+        candado = CandadoLocal(config.TELEGRAM_BOT_TOKEN, carpeta_candado)
+        if not candado.tomar():
+            log.warning("telegram.otro_proceso: otra API de esta PC ya tiene el bot de este token; "
+                        "esta API sigue sin bot")
             return None
         if servicio is None:
             from app.agente import obtener_servicio
@@ -296,7 +310,7 @@ def arrancar(servicio: Any = None, http: httpx.Client | None = None) -> BotEnMar
                           permitidos=config.TELEGRAM_USUARIOS_PERMITIDOS, hilos=config.TELEGRAM_HILOS)
         parar = threading.Event()
         hilo = threading.Thread(target=bot.ejecutar, args=(parar,), daemon=True, name="telegram-bot")
-        _en_marcha = BotEnMarcha(bot, hilo, parar)
+        _en_marcha = BotEnMarcha(bot, hilo, parar, candado)
         hilo.start()
     if config.TELEGRAM_USUARIOS_PERMITIDOS:
         log.warning("telegram.bot_activo: solo responde a %s usuario(s) permitido(s)",
@@ -305,3 +319,17 @@ def arrancar(servicio: Any = None, http: httpx.Client | None = None) -> BotEnMar
         log.warning("telegram.bot_activo SIN lista de usuarios permitidos: responde a cualquiera "
                     "que encuentre el bot (ver TELEGRAM_USUARIOS_PERMITIDOS)")
     return _en_marcha
+
+
+def estado_arranque() -> str:
+    """Lo que hará `arrancar()`, para que run.bat lo muestre antes de levantar la API:
+    apagado | sin_token | ocupado (otra API de esta PC tiene el bot) | lista | abierto."""
+    if not config.TELEGRAM_ACTIVO:
+        return "apagado"
+    if not config.TELEGRAM_BOT_TOKEN:
+        return "sin_token"
+    candado = CandadoLocal(config.TELEGRAM_BOT_TOKEN)
+    if not candado.tomar():
+        return "ocupado"
+    candado.soltar()
+    return "lista" if config.TELEGRAM_USUARIOS_PERMITIDOS else "abierto"

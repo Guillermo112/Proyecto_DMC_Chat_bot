@@ -1,6 +1,6 @@
 # Pendientes: bot de Telegram
 
-**Estado: completo** (pasos 1 a 8). Probado en Telegram real el 2026-11-22: identificación
+**Estado: completo** (pasos 1 a 9). Probado en Telegram real el 2026-11-22: identificación
 por RUC y código, conversación con el agente y caso `C-000021` registrado con
 `canal = telegram` y derivado. En el camino se corrigió el corte de respuestas por el tope
 de tokens (`CHAT_MAX_TOKENS`, afecta también a la web).
@@ -91,6 +91,13 @@ paso se implementan); al terminar un paso, marcarlas ✅ allí.
    inexistente con el OTP real.
 8. [x] **Documentación** (hecho): sección "Bot de Telegram" en el README (crear el bot,
    variables, comandos, un bot por integrante) y pendiente cerrado en `PENDIENTES_rag.md`.
+9. [x] **Arranque explícito y candado local** (hecho, después de la prueba manual):
+   `run.bat` deja el bot apagado aunque haya token y `run_telegram.bat` lo enciende
+   (`TELEGRAM_ACTIVO=1`). `app/telegram/candado.py` bloquea un archivo por token en la
+   carpeta temporal: una segunda API de la misma PC arranca sin bot y lo avisa. Ambos
+   `.bat` muestran el estado (`apagado`, `sin_token`, `ocupado`, `lista`, `abierto`).
+   Tests: `tests/test_telegram_candado.py` (incluye uno entre procesos) y
+   `tests/test_telegram_bot.py`.
 
 ## Prueba manual (Telegram real)
 
