@@ -96,3 +96,31 @@ CHAT_MAX_TOKENS = int(os.getenv("CHAT_MAX_TOKENS", "600"))
 CHAT_TEMPERATURA = float(os.getenv("CHAT_TEMPERATURA", "0.3"))
 # Cargar el índice del RAG al arrancar la API (en segundo plano), no en el primer mensaje.
 RAG_PRECARGAR = (os.getenv("RAG_PRECARGAR") or "true").strip().lower() in ("1", "true", "si", "sí", "yes")
+
+# --- Bot de Telegram (app/telegram) -------------------------------------------
+# Token de @BotFather. Vacío = el bot no arranca y la API queda igual. Es un secreto:
+# solo en .env. Un token admite un solo proceso leyendo mensajes (si no, Telegram da 409).
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+
+
+def leer_ids_telegram(texto: str) -> frozenset[int]:
+    """IDs numéricos de Telegram separados por coma. Vacío = sin filtro.
+
+    Un valor mal escrito es un error y no se salta: si todos fueran inválidos, la
+    lista quedaría vacía y el bot respondería a cualquiera.
+    """
+    partes = [p.strip() for p in texto.split(",") if p.strip()]
+    invalidos = [p for p in partes if not (p.isascii() and p.isdigit()) or int(p) <= 0]
+    if invalidos:
+        raise ValueError(f"TELEGRAM_USUARIOS_PERMITIDOS: valores inválidos {invalidos} "
+                         "(se esperan IDs numéricos separados por coma)")
+    return frozenset(int(p) for p in partes)
+
+
+# Usuarios que pueden usar el bot (pruebas). Vacío = cualquiera que encuentre el bot.
+TELEGRAM_USUARIOS_PERMITIDOS = leer_ids_telegram(os.getenv("TELEGRAM_USUARIOS_PERMITIDOS", ""))
+# Límite de códigos pedidos por chat (ventana deslizante), como el límite por IP de la web.
+TELEGRAM_MAX_SOLICITUDES = int(os.getenv("TELEGRAM_MAX_SOLICITUDES", "5"))
+TELEGRAM_VENTANA_SEG = int(os.getenv("TELEGRAM_VENTANA_SEG", "900"))
+# Turnos atendidos en paralelo (de chats distintos; los de un mismo chat van en orden).
+TELEGRAM_HILOS = max(1, int(os.getenv("TELEGRAM_HILOS", "4")))
