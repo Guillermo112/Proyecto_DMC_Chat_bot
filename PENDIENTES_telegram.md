@@ -1,5 +1,13 @@
 # Pendientes: bot de Telegram
 
+**Estado: completo** (pasos 1 a 8). Probado en Telegram real el 2026-11-22: identificación
+por RUC y código, conversación con el agente y caso `C-000021` registrado con
+`canal = telegram` y derivado. En el camino se corrigió el corte de respuestas por el tope
+de tokens (`CHAT_MAX_TOKENS`, afecta también a la web).
+
+**Para decidir con el equipo (fuera de este trabajo):** un reclamo sobre el propio
+ejecutivo (`contacto_persona`) se deriva a ese mismo ejecutivo.
+
 Rama: `feat/telegram` (desde `develop` @ `aa86f63`, con el chat web ya integrado, PR #10).
 PR contra `develop`.
 
@@ -75,16 +83,14 @@ paso se implementan); al terminar un paso, marcarlas ✅ allí.
    hilo daemon (solo con token, uno por proceso) y avisa si no hay lista de permitidos;
    el `lifespan` de `app/main.py` lo arranca y lo detiene al cerrar. `run.bat` muestra el
    estado del bot. `tests/conftest.py` vacía el token en todos los tests.
-7. [ ] **Tests** con `httpx.MockTransport` (sin red ni token):
-   - Login: RUC inválido, RUC inexistente (mismo mensaje), código erróneo, bloqueo por
-     intentos, sesión vencida, límite por chat.
-   - Grupo ignorado; usuario fuera de la lista permitida ignorado.
-   - Mensaje que no es texto.
-   - Caso registrado con `canal = telegram`.
-   - Formato HTML (escape y negrita) y corte a 4096.
-   - Orden por chat: dos mensajes seguidos del mismo chat no se mezclan.
-8. [ ] **Documentación:** README (sección del bot: crear el bot con @BotFather, `.env`,
-   cómo probar) y quitar "Bot de Telegram" de pendientes en README y `PENDIENTES_rag.md`.
+7. [x] **Tests** (hecho): cada paso trajo los suyos (`test_telegram_sesiones.py`,
+   `test_telegram_bot.py`, `test_telegram_formato.py`, `test_config_telegram.py`) y
+   `tests/test_telegram_integracion.py` prueba la cadena completa sin red: API simulada →
+   bot → sesiones con el OTP real → agente con modelo simulado → caso con canal
+   `telegram` en una copia de la base; además el bloqueo por intentos y el RUC
+   inexistente con el OTP real.
+8. [x] **Documentación** (hecho): sección "Bot de Telegram" en el README (crear el bot,
+   variables, comandos, un bot por integrante) y pendiente cerrado en `PENDIENTES_rag.md`.
 
 ## Prueba manual (Telegram real)
 
