@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anticipa · Chat de facturación</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --texto: #1d232b; --suave: #5f6b7a; --borde: #dde2e8;
+    --acento: #1f6feb; --acento-txt: #ffffff; --yo: #e8f0fe; --bot: #ffffff;
+    --ok: #1a7f37; --ok-bg: #e6f4ea; --error: #cf222e; --error-bg: #ffebe9;
+    --doc: #6639ba; --doc-bg: #f0e9ff; --tool: #0b6e99; --tool-bg: #e3f4fb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1419; --panel: #171d24; --texto: #e3e8ee; --suave: #95a1af; --borde: #2a333d;
+      --acento: #58a6ff; --acento-txt: #0f1419; --yo: #1d2d44; --bot: #1c232b;
+      --ok: #56d364; --ok-bg: #12301c; --error: #ff7b72; --error-bg: #3d1214;
+      --doc: #bc8cff; --doc-bg: #2a1d45; --tool: #6cc5f0; --tool-bg: #0f2c3a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--texto);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { padding: 12px 20px; border-bottom: 1px solid var(--borde); background: var(--panel);
+           display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 18px; }
+  header .sesion { margin-left: auto; font-size: 13px; color: var(--suave); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--acento);
+           background: var(--acento); color: var(--acento-txt); cursor: pointer; }
+  button.sec { background: transparent; color: var(--acento); }
+  button:disabled { opacity: .5; cursor: wait; }
+  input[type=text] { font: inherit; color: inherit; padding: 10px 12px; background: var(--bg);
+           border: 1px solid var(--borde); border-radius: 8px; min-width: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--borde); border-radius: 10px; padding: 16px; }
+  .oculto { display: none !important; }
+  #login { max-width: 420px; margin: 40px auto; padding: 0 16px; }
+  #login h2 { margin: 0 0 6px; font-size: 18px; }
+  #login p { margin: 0 0 14px; color: var(--suave); font-size: 14px; }
+  #login form { display: flex; gap: 8px; margin-top: 8px; }
+  #login input { flex: 1; }
+  .nota { font-size: 13px; color: var(--suave); margin-top: 10px; }
+  .error { color: var(--error); }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; padding: 16px 20px;
+         max-width: 1360px; margin: 0 auto; height: calc(100% - 58px); }
+  @media (max-width: 960px) { main { grid-template-columns: 1fr; height: auto; padding: 12px 16px; } }
+  .chat { display: flex; flex-direction: column; min-height: 420px; }
+  #mensajes { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 4px 2px 12px; }
+  .msg { max-width: 85%; padding: 10px 14px; border-radius: 12px; white-space: pre-wrap; word-wrap: break-word;
+         border: 1px solid var(--borde); }
+  .msg.yo { align-self: flex-end; background: var(--yo); border-color: transparent; }
+  .msg.bot { align-self: flex-start; background: var(--bot); }
+  .msg.sistema { align-self: center; background: transparent; border: none; color: var(--suave); font-size: 13px; }
+  .msg .meta { display: block; margin-top: 6px; font-size: 12px; color: var(--suave); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .chip { font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--borde);
+          background: var(--bg); color: var(--texto); cursor: pointer; }
+  #formChat { display: flex; gap: 8px; }
+  #formChat input { flex: 1; }
+  aside { overflow-y: auto; }
+  aside h2 { font-size: 14px; margin: 0 0 4px; }
+  aside .sub { font-size: 12px; color: var(--suave); margin: 0 0 12px; }
+  .totales { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .totales div { background: var(--bg); border-radius: 8px; padding: 8px; text-align: center; }
+  .totales b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
+  .totales span { font-size: 11px; color: var(--suave); }
+  .traza { border-top: 1px solid var(--borde); padding: 10px 0; font-size: 13px; }
+  .traza .pregunta { font-weight: 600; margin-bottom: 6px; }
+  .item { border-radius: 8px; padding: 6px 8px; margin: 6px 0; }
+  .item.tool { background: var(--tool-bg); }
+  .item.doc { background: var(--doc-bg); }
+  .item .tit { font-weight: 600; }
+  .item.tool .tit { color: var(--tool); }
+  .item.doc .tit { color: var(--doc); }
+  .item.mal { background: var(--error-bg); }
+  .item.mal .tit { color: var(--error); }
+  details { margin-top: 4px; }
+  summary { cursor: pointer; color: var(--suave); font-size: 12px; }
+  pre { white-space: pre-wrap; word-break: break-word; font-size: 11px; margin: 4px 0 0; max-height: 220px; overflow-y: auto; }
+  .costo { color: var(--suave); font-size: 12px; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .hueco { color: var(--suave); font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Anticipa</h1>
+  <span class="nota" style="margin:0">Asistente de facturación · modo A</span>
+  <div class="sesion oculto" id="barraSesion">
+    <span id="quien"></span>
+    <button class="sec" id="nueva" type="button">Nueva conversación</button>
+    <button class="sec" id="salir" type="button">Salir</button>
+  </div>
+</header>
+
+<section id="login">
+  <div class="panel">
+    <h2>Identifícate</h2>
+    <p>Escribe el RUC de tu empresa. Si está registrado, enviamos un código de 6 dígitos al correo de facturación.</p>
+    <form id="formRuc">
+      <input id="ruc" type="text" inputmode="numeric" maxlength="11" placeholder="RUC (11 dígitos)" autocomplete="off">
+      <button id="btnRuc" type="submit">Enviar código</button>
+    </form>
+    <form id="formCodigo" class="oculto">
+      <input id="codigo" type="text" inputmode="numeric" maxlength="6" placeholder="Código de 6 dígitos" autocomplete="one-time-code">
+      <button id="btnCodigo" type="submit">Ingresar</button>
+    </form>
+    <div class="nota" id="estadoLogin">RUC de prueba: <code>clientes_prueba.bat</code> en la carpeta del proyecto.</div>
+  </div>
+</section>
+
+<main id="app" class="oculto">
+  <section class="panel chat">
+    <div id="mensajes"></div>
+    <div class="chips" id="chips"></div>
+    <form id="formChat">
+      <input id="entrada" type="text" maxlength="2000" placeholder="Escribe tu consulta…" autocomplete="off">
+      <button id="enviar" type="submit">Enviar</button>
+    </form>
+  </section>
+  <aside class="panel">
+    <h2>Qué pasó en cada turno</h2>
+    <p class="sub">Herramientas = datos del cliente (base). Documentos = políticas y glosario (RAG). Ningún monto sale del modelo.</p>
+    <div class="totales">
+      <div><b id="tTurnos">0</b><span>turnos</span></div>
+      <div><b id="tLlamadas">0</b><span>llamadas al modelo</span></div>
+      <div><b id="tTokens">0</b><span>tokens (entrada+salida)</span></div>
+    </div>
+    <div id="trazas"><p class="hueco">Aún no hay turnos.</p></div>
+  </aside>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const EJEMPLOS = ["Me llegaron dos facturas iguales", "¿Por qué subió mi factura de octubre?",
+  "¿Qué es el prorrateo?", "¿Tengo facturas vencidas?", "Quiero renegociar mi tarifa", "Sí, regístralo por favor"];
+const almacen = {
+  leer(k) { try { return sessionStorage.getItem(k); } catch { return null; } },
+  guardar(k, v) { try { sessionStorage.setItem(k, v); } catch {} },
+  borrar(k) { try { sessionStorage.removeItem(k); } catch {} },
+};
+let token = almacen.leer("anticipa_token");
+let conversacion = nuevoId();
+let idVerificacion = null;
+const totales = { turnos: 0, llamadas: 0, tokens: 0 };
+
+function nuevoId() { return "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+function escapar(t) {
+  return String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function formatear(t) { return escapar(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>"); }
+
+async function api(ruta, opciones = {}) {
+  const headers = { "Content-Type": "application/json", ...(opciones.headers || {}) };
+  if (token) headers.Authorization = "Bearer " + token;
+  const r = await fetch(ruta, { ...opciones, headers });
+  let datos = null;
+  try { datos = await r.json(); } catch {}
+  if (r.status === 401 && token) { cerrarSesion("Tu sesión venció. Vuelve a identificarte."); }
+  if (!r.ok) {
+    const det = datos && datos.detail;
+    throw new Error(typeof det === "string" ? det : (Array.isArray(det) ? det.map((d) => d.msg).join("; ") : `Error ${r.status}`));
+  }
+  return datos;
+}
+
+// ---------------------------------------------------------------- login
+$("formRuc").onsubmit = async (e) => {
+  e.preventDefault();
+  const ruc = $("ruc").value.trim();
+  if (!/^\d{11}$/.test(ruc)) { $("estadoLogin").innerHTML = '<span class="error">El RUC tiene 11 dígitos.</span>'; return; }
+  $("btnRuc").disabled = true;
+  try {
+    const d = await api("/auth/solicitar-codigo", { method: "POST", body: JSON.stringify({ ruc }) });
+    idVerificacion = d.id_verificacion;
+    $("estadoLogin").textContent = d.mensaje;
+    $("formCodigo").classList.remove("oculto");
+    $("codigo").focus();
+  } catch (err) {
+    $("estadoLogin").innerHTML = `<span class="error">${escapar(err.message)}</span>`;
+  } finally { $("btnRuc").disabled = false; }
+};
+
+$("formCodigo").onsubmit = async (e) => {
+  e.preventDefault();
+  $("btnCodigo").disabled = true;
+  try {
+    const d = await api("/auth/verificar-codigo", { method: "POST",
+      body: JSON.stringify({ id_verificacion: idVerificacion, codigo: $("codigo").value.trim() }) });
+    token = d.access_token;
+    almacen.guardar("anticipa_token", token);
+    await abrirChat();
+  } catch (err) {
+    $("estadoLogin").innerHTML = `<span class="error">${escapar(err.message)}</span>`;
+  } finally { $("btnCodigo").disabled = false; }
+};
+
+async function abrirChat() {
+  let perfil;
+  try { perfil = await api("/mi/perfil"); } catch { return; }
+  $("quien").textContent = `${perfil.razon_social} · RUC ${perfil.ruc}`;
+  $("login").classList.add("oculto");
+  $("app").classList.remove("oculto");
+  $("barraSesion").classList.remove("oculto");
+  if (!$("mensajes").children.length) {
+    agregar("bot", `¡Hola! Soy Anticipa, tu asistente de facturación (${perfil.razon_social}). ¿En qué te ayudo?`);
+  }
+  $("entrada").focus();
+}
+
+function cerrarSesion(motivo) {
+  token = null;
+  almacen.borrar("anticipa_token");
+  $("app").classList.add("oculto");
+  $("barraSesion").classList.add("oculto");
+  $("login").classList.remove("oculto");
+  $("formCodigo").classList.add("oculto");
+  $("codigo").value = "";
+  $("mensajes").innerHTML = "";
+  $("estadoLogin").textContent = motivo || "Sesión cerrada.";
+}
+$("salir").onclick = () => cerrarSesion();
+
+// ---------------------------------------------------------------- chat
+function agregar(quien, texto, meta) {
+  const div = document.createElement("div");
+  div.className = "msg " + quien;
+  div.innerHTML = formatear(texto) + (meta ? `<span class="meta">${escapar(meta)}</span>` : "");
+  $("mensajes").appendChild(div);
+  $("mensajes").scrollTop = $("mensajes").scrollHeight;
+  return div;
+}
+
+function traza(pregunta, d) {
+  if (!totales.turnos) $("trazas").innerHTML = "";
+  totales.turnos += 1; totales.llamadas += d.llamadas_modelo;
+  totales.tokens += d.tokens.entrada + d.tokens.salida;
+  $("tTurnos").textContent = totales.turnos; $("tLlamadas").textContent = totales.llamadas;
+  $("tTokens").textContent = totales.tokens.toLocaleString("es-PE");
+
+  const tools = d.herramientas.map((h) => `
+    <div class="item tool${h.ok ? "" : " mal"}">
+      <div class="tit">🔧 ${escapar(h.nombre)}(${escapar(Object.entries(h.argumentos).map(([k, v]) => `${k}=${v}`).join(", "))})</div>
+      <div>${escapar(h.resumen)} · ${h.ms} ms</div>
+      <details><summary>Ver datos devueltos</summary><pre>${escapar(h.resultado)}</pre></details>
+    </div>`).join("");
+  const docs = d.documentos.map((x) => `
+    <div class="item doc">
+      <div class="tit">📄 ${escapar(x.fuente)}${x.pagina ? " · pág. " + x.pagina : " · " + escapar(x.id)}</div>
+      <div>similitud ${x.score.toFixed(3)} · ${escapar(x.seccion)}</div>
+      <details><summary>Ver fragmento</summary><pre>${escapar(x.texto)}</pre></details>
+    </div>`).join("");
+  const nada = !tools && !docs ? '<div class="hueco">Respondió sin herramientas ni documentos.</div>' : "";
+  const cache = d.tokens.cache ? ` (${d.tokens.cache.toLocaleString("es-PE")} desde caché)` : "";
+  const div = document.createElement("div");
+  div.className = "traza";
+  div.innerHTML = `<div class="pregunta">“${escapar(pregunta)}”</div>${tools}${docs}${nada}
+    ${d.aviso ? `<div class="nota error">${escapar(d.aviso)}</div>` : ""}
+    <div class="costo">${d.llamadas_modelo} llamada(s) · ${d.tokens.entrada.toLocaleString("es-PE")} tokens de entrada${cache} · ${d.tokens.salida} de salida · ${(d.ms / 1000).toFixed(1)} s · ${escapar(d.modelo)}</div>`;
+  $("trazas").prepend(div);
+}
+
+async function enviar(texto) {
+  texto = texto.trim();
+  if (!texto) return;
+  $("entrada").value = "";
+  agregar("yo", texto);
+  const pensando = agregar("sistema", "Anticipa está escribiendo…");
+  $("enviar").disabled = true;
+  try {
+    const d = await api("/mi/chat", { method: "POST", body: JSON.stringify({ mensaje: texto, conversacion_id: conversacion }) });
+    pensando.remove();
+    agregar("bot", d.respuesta);
+    traza(texto, d);
+  } catch (err) {
+    pensando.remove();
+    if (token) agregar("sistema", err.message);
+  } finally {
+    $("enviar").disabled = false;
+    $("entrada").focus();
+  }
+}
+
+$("formChat").onsubmit = (e) => { e.preventDefault(); enviar($("entrada").value); };
+$("chips").innerHTML = EJEMPLOS.map((q) => `<button type="button" class="chip">${escapar(q)}</button>`).join("");
+$("chips").querySelectorAll(".chip").forEach((b) => b.onclick = () => enviar(b.textContent));
+$("nueva").onclick = async () => {
+  try { await api(`/mi/chat/${conversacion}`, { method: "DELETE" }); } catch {}
+  conversacion = nuevoId();
+  $("mensajes").innerHTML = "";
+  agregar("sistema", "Conversación nueva: el asistente ya no recuerda lo anterior.");
+};
+
+if (token) abrirChat();
+</script>
+</body>
+</html>

@@ -35,18 +35,18 @@ prometería cosas que el sistema no hace.
 
 ## 2. Herramientas del agente (`app/tools`)
 
-- [ ] Una herramienta por ruta `/mi` útil al agente: perfil, facturas, detalle,
+- [x] Una herramienta por ruta `/mi` útil al agente: perfil, facturas, detalle,
       saldo, comparar, servicios, anomalías, solicitudes, registrar y listar casos.
       Descripciones tomadas de `docs/casuisticas_api.md` (cuándo usar cada una,
       `null` no es 0, `comparable: false`, `caso_abierto`).
-- [ ] El `cliente_id` lo inyecta el código desde la sesión, **nunca** el modelo
+- [x] El `cliente_id` lo inyecta el código desde la sesión, **nunca** el modelo
       (mismo principio que `Depends(cliente_actual)`).
-- [ ] Decidir: herramientas que llaman a la API HTTP con el token, o que llaman a
-      `app/data` en proceso. La API mantiene una sola puerta de entrada.
+- [x] Decidido (2026-11-22): llaman a `app/data` en proceso (las mismas funciones que
+      `/mi`). Por HTTP no cambia el costo (todo es local) y suma latencia y código.
 - [ ] **Retirar `db/catalogo_sqlite.py`**: prototipo anterior que lee la base
       directo (se salta `/mi`), usa otras variables (`DB_PATH`, `MODO_AGENTE`) e
       incluye `tramo_para` (modo B). Dejaría dos fuentes de verdad.
-- [ ] Test: ninguna herramienta acepta `cliente_id` como argumento del modelo.
+- [x] Test: ninguna herramienta acepta `cliente_id` como argumento del modelo.
 
 ## 3. RAG
 
@@ -94,8 +94,14 @@ prometería cosas que el sistema no hace.
 - [ ] Calibrar `RAG_UMBRAL` con el set de evaluación. Medición con granite y filas de
       tabla: relevantes 0,83-0,96, ajenas 0,74-0,81 (por defecto 0,82; el 0,35 de sesion7
       no filtra). El umbral solo no separa lo fuera de tema: lo cubre el prompt.
-- [ ] Prompt del sistema: alcance modo A, montos solo desde herramientas, `null`
-      no es 0, no prometer devoluciones ni fechas, derivar con `POST /mi/casos`.
+- [x] Prompt del sistema (`app/agente/prompt.py`, ~490 palabras): alcance modo A,
+      montos solo desde herramientas, `null` no es 0, no prometer devoluciones ni fechas,
+      registrar y derivar. Resume el PDF 01 (que sigue también en el RAG).
+- [x] Chat (`POST /mi/chat`, página `/chat`, 2026-11-22): RAG previo al modelo (sin
+      llamada extra), 10 herramientas, tope de vueltas, memoria corta en memoria y panel
+      de traza con tokens. Modelo: DeepSeek por `LLM_*`.
+- [ ] Probar el chat con DeepSeek real (la clave del `.env` dio 401) y ajustar el prompt
+      con lo que se vea en las casuísticas.
 - [ ] Evaluación: una pregunta por casuística con los datos sembrados
       (ejemplos en `docs/casuisticas_api.md`), comprobando herramienta llamada,
       monto citado y frases prohibidas.

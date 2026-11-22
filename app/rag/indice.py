@@ -197,6 +197,10 @@ class IndiceConocimiento:
             for h in self.buscar(pregunta, k=k)
         )
 
+    def umbral(self) -> float:
+        """Umbral configurado para el motor en uso (cada motor tiene su escala)."""
+        return config.RAG_UMBRAL if self._motor_usado == "denso" else config.RAG_UMBRAL_TFIDF
+
     def info(self) -> dict[str, Any]:
         """Estado sin forzar la indexación (no hace esperar al modelo)."""
         return {
@@ -206,3 +210,22 @@ class IndiceConocimiento:
             "indexado": self._matriz is not None,
             "aviso": self.aviso or None,
         }
+
+
+# ---------------------------------------------------------------------------
+# Instancia única por proceso (la comparten el chat y /dev/rag)
+# ---------------------------------------------------------------------------
+_indice_global: IndiceConocimiento | None = None
+_candado_global = threading.Lock()
+
+
+def obtener_indice() -> IndiceConocimiento:
+    """Índice construido e indexado una sola vez (leer PDF y cargar el modelo tarda ~10 s)."""
+    global _indice_global
+    if _indice_global is None:
+        with _candado_global:
+            if _indice_global is None:
+                indice = IndiceConocimiento()
+                indice.indexar()
+                _indice_global = indice
+    return _indice_global

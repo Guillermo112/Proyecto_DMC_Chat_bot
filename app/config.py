@@ -84,3 +84,14 @@ RAG_MMR_LAMBDA = float(os.getenv("RAG_MMR_LAMBDA", "0.5"))  # 1 = relevancia, 0 
 # Fragmentación de los PDF (los JSON van un registro por fragmento).
 CHUNK_MAX_PALABRAS = int(os.getenv("CHUNK_MAX_PALABRAS", "150"))
 CHUNK_OVERLAP_PALABRAS = int(os.getenv("CHUNK_OVERLAP_PALABRAS", "25"))
+
+# --- Chat (app/agente) --------------------------------------------------------
+# Cada vuelta es una llamada al modelo: tope para que un error no encadene llamadas.
+CHAT_MAX_VUELTAS = int(os.getenv("CHAT_MAX_VUELTAS", "3"))
+# Mensajes de la conversación que se reenvían en cada turno (memoria corta).
+CHAT_MAX_MENSAJES = int(os.getenv("CHAT_MAX_MENSAJES", "8"))
+CHAT_MAX_CONVERSACIONES = int(os.getenv("CHAT_MAX_CONVERSACIONES", "200"))
+CHAT_MAX_TOKENS = int(os.getenv("CHAT_MAX_TOKENS", "600"))
+CHAT_TEMPERATURA = float(os.getenv("CHAT_TEMPERATURA", "0.3"))
+# Cargar el índice del RAG al arrancar la API (en segundo plano), no en el primer mensaje.
+RAG_PRECARGAR = (os.getenv("RAG_PRECARGAR") or "true").strip().lower() in ("1", "true", "si", "sí", "yes")

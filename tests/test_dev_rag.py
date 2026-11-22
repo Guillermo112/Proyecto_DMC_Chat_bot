@@ -17,7 +17,9 @@ CORPUS = [
 
 @pytest.fixture
 def cliente(monkeypatch):
-    monkeypatch.setattr(dev_rag, "_indice", IndiceConocimiento(fragmentos=CORPUS, motor="tfidf"))
+    import app.rag.indice as modulo
+
+    monkeypatch.setattr(modulo, "_indice_global", IndiceConocimiento(fragmentos=CORPUS, motor="tfidf"))
     app = FastAPI()
     app.include_router(dev_rag.router)
     return TestClient(app)

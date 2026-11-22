@@ -137,7 +137,9 @@ def test_cliente_inexistente_no_ve_nada():
 def test_todas_las_rutas_mi_exigen_token():
     """Si alguien agrega una ruta /mi sin token, este test lo detecta."""
     rutas_mi = {p: ops for p, ops in app.openapi()["paths"].items() if p.startswith("/mi")}
-    assert len(rutas_mi) == len(RUTAS)
+    rutas_chat = {"/mi/chat", "/mi/chat/{conversacion_id}"}  # tests/test_chat_api.py
+    assert len(rutas_mi) == len(RUTAS) + len(rutas_chat)
+    assert rutas_chat <= set(rutas_mi)
     for path, ops in rutas_mi.items():
         for metodo, op in ops.items():
             assert op.get("security"), f"{metodo.upper()} {path} no exige token"

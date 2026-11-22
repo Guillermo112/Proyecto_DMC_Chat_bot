@@ -48,10 +48,11 @@ El RAG **nunca** es fuente de un monto, una fecha o un estado del cliente.
 
 | Hecho | Pendiente |
 |---|---|
-| Base de datos con las casuísticas CS-01 a CS-13 | Herramientas del agente (`app/tools`) |
-| Identificación por RUC + código OTP al correo | Chat con el modelo de lenguaje (prompt y turno) |
-| API del cliente autenticado (`/mi/...`) | Alinear `faq.json` con el modo A |
-| RAG con filtro de modo A y banco de pruebas web (`/dev/rag`) | Bot de Telegram |
+| Base de datos con las casuísticas CS-01 a CS-13 | Alinear `faq.json` con el modo A y su clasificador |
+| Identificación por RUC + código OTP al correo | Evaluación por casuística y calibración del umbral |
+| API del cliente autenticado (`/mi/...`) | Bot de Telegram (opcional) |
+| RAG con filtro de modo A y banco de pruebas web (`/dev/rag`) | |
+| Chat web (`/chat`) con herramientas, RAG y panel de traza | |
 
 Detalle de lo pendiente: [`PENDIENTES_rag.md`](PENDIENTES_rag.md).
 
@@ -181,6 +182,7 @@ se cierre antes de leerla. Desde PowerShell se escribe con `.\` delante:
    | `NOMBRE_PRUEBA_n` | Tu nombre (opcional; se muestra como contacto) |
    | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_REMITENTE` | La cuenta que **envía** los códigos. Con Gmail: `smtp.gmail.com`, `587` y una [contraseña de aplicación](https://myaccount.google.com/apppasswords) (no tu contraseña normal) |
    | `ENTORNO` | Déjalo en `dev` (ya viene así): habilita el banco de pruebas y el CRUD de desarrollo |
+   | `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` | El modelo del chat. Para DeepSeek: `https://api.deepseek.com`, la clave del equipo y el modelo acordado. Sin esto, todo funciona salvo `/chat` |
 
    No cambies `AUTH_SECRET`: lo generó `install.bat`. El resto de variables tiene
    valores por defecto (ver [Variables de entorno](#variables-de-entorno-env)).
@@ -193,8 +195,12 @@ se cierre antes de leerla. Desde PowerShell se escribe con `.\` delante:
 5. **Ejecuta `run.bat`** y abre en el navegador:
    - `http://127.0.0.1:8000/health` → debe responder `{"status": "OK", "db": "OK"}`.
    - `http://127.0.0.1:8000/docs` → documentación interactiva de la API.
-   - `http://127.0.0.1:8000/dev/rag` → banco de pruebas del RAG (la primera búsqueda
-     tarda unos segundos).
+   - `http://127.0.0.1:8000/chat` → **el chat**: identifícate con un RUC de tu slot y el
+     código que llega a tu correo.
+   - `http://127.0.0.1:8000/dev/rag` → banco de pruebas del RAG.
+
+   Al arrancar, la API carga el índice del RAG en segundo plano (~10 s); si escribes
+   antes, el primer mensaje espera a que termine.
 
 6. **(Opcional) Prueba el código OTP** con un RUC de tu slot, en otra terminal:
 
@@ -243,7 +249,7 @@ se cierre antes de leerla. Desde PowerShell se escribe con `.\` delante:
 | Borraste `.venv` o algo dejó de funcionar | `install.bat` |
 | `run.bat` dice que el puerto está ocupado | Cierra el otro servidor o usa `run.bat 8001` |
 | No llegan los códigos OTP | Revisa `SMTP_*`, tu `CORREO_PRUEBA_n` y que hayas ejecutado `regenerar_base.bat` después; revisa también spam |
-| Se conecte el chat con el modelo de lenguaje | Completa `LLM_BASE_URL`, `LLM_API_KEY` y `LLM_MODEL` en `.env` |
+| El chat responde "El asistente no está disponible" | Revisa `LLM_BASE_URL`, `LLM_API_KEY` y `LLM_MODEL` en `.env` (el mensaje dice si falta o si la clave es inválida) y reinicia `run.bat` |
 
 ---
 
@@ -260,7 +266,7 @@ suyo. `.env.example` es solo la plantilla: la app no lo lee, y si cambia no actu
 | `CORREO_PRUEBA_1` … `CORREO_PRUEBA_5` | Correo de cada integrante para recibir el OTP. Clientes por slot: 1 → 1, 6, 11 · 2 → 2, 7, 12 · 3 → 3, 8, 13 · 4 → 4, 9 · 5 → 5, 10. Vacío = esos clientes quedan con `facturacion@clienteNN.example`. Requiere `regenerar_base.bat` |
 | `NOMBRE_PRUEBA_1` … `NOMBRE_PRUEBA_5` | Nombre del contacto (opcional) |
 | `SMTP_HOST`, `SMTP_PORT` (`587`), `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_REMITENTE` | Cuenta que envía el código OTP. Puerto 465 = SSL; otro = STARTTLS |
-| `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` | Modelo de lenguaje (cualquier endpoint compatible). Aún no se usan: hacen falta cuando se conecte el chat. Respaldos: `LLM_2_*` … `LLM_9_*` |
+| `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` | Modelo del chat (cualquier endpoint compatible; el equipo usa DeepSeek). Sin ellos, `/chat` responde que el asistente no está disponible. Respaldos: `LLM_2_*` … `LLM_9_*` |
 
 ### La que genera `install.bat`
 
@@ -292,6 +298,10 @@ suyo. `.env.example` es solo la plantilla: la app no lo lee, y si cambia no actu
 | `RAG_UMBRAL`, `RAG_UMBRAL_TFIDF` | `0.82`, `0.08` | Similitud mínima para usar un fragmento (cada motor tiene su escala) |
 | `RAG_K_INICIAL`, `RAG_K_FINAL` | `8`, `3` | Candidatos recuperados y fragmentos que llegan al prompt |
 | `RAG_MMR_LAMBDA` | `0.5` | 1 = solo relevancia, 0 = solo variedad |
+| `RAG_PRECARGAR` | `true` | Cargar el índice al arrancar la API (en segundo plano) y no en el primer mensaje |
+| `CHAT_MAX_VUELTAS` | `3` | Llamadas al modelo con herramientas por turno (más una para cerrar) |
+| `CHAT_MAX_MENSAJES` | `8` | Mensajes previos que se reenvían en cada turno: más memoria, más tokens |
+| `CHAT_MAX_TOKENS`, `CHAT_TEMPERATURA` | `600`, `0.3` | Largo máximo y variabilidad de cada respuesta del modelo |
 | `CHUNK_MAX_PALABRAS`, `CHUNK_OVERLAP_PALABRAS` | `150`, `25` | Tamaño y solape de los fragmentos de prosa |
 
 ---
@@ -333,7 +343,8 @@ app/
   llm/           # cliente del modelo de lenguaje (router del curso)
   rag/           # RAG: lectura de PDF, filtro de modo A, índice y búsqueda
   static/        # página del banco de pruebas
-  tools/         # herramientas del agente (pendiente)
+  agente/        # prompt del sistema y turno del chat (RAG previo + herramientas)
+  tools/         # herramientas del agente: datos del cliente desde app/data
 db/              # schema.sql, generar_datos.py y la base generada (anticipa.db)
 docs/            # PDF de conocimiento y documentación de la capa de datos
 scripts/         # demo_otp.py, preparar_rag.py, clientes_prueba.py
@@ -416,6 +427,33 @@ Sin autenticación: no exponer fuera de tu computadora.
 
 Con cualquier otro valor de `ENTORNO`, o sin definirlo, quedan únicamente `/health`,
 `/auth` y `/mi`.
+
+### Chat (`/chat` y `POST /mi/chat`)
+
+La página `/chat` hace la identificación (RUC + código) y conversa con
+`POST /mi/chat` (`{"mensaje", "conversacion_id"}`, con el token). Cada turno
+(`app/agente/chat.py`):
+
+1. **RAG previo:** busca en el índice (local, sin costo). Si algún fragmento pasa el
+   umbral, lo agrega como contexto. No gasta una llamada al modelo para decidirlo.
+2. **Modelo con herramientas:** el prompt del sistema (`app/agente/prompt.py`, lo
+   esencial del PDF 01) más 10 herramientas (`app/tools`): perfil, facturas, detalle,
+   saldo, anomalías, servicios, comparar periodos, solicitudes, registrar caso y
+   listar casos. El `cliente_id` lo pone el código desde el token; si el modelo lo
+   manda, se ignora.
+3. **Tope de vueltas** (`CHAT_MAX_VUELTAS`): cada herramienta pedida es una llamada
+   más; al llegar al tope, una última llamada sin herramientas cierra la respuesta.
+4. **Memoria corta:** se reenvían los últimos `CHAT_MAX_MENSAJES` textos de la
+   conversación (sin resultados de herramientas). Vive en memoria: se pierde al
+   reiniciar la API. `DELETE /mi/chat/{conversacion_id}` la olvida.
+
+La respuesta trae la traza que muestra el panel de la página: herramientas usadas
+(con sus datos), documentos citados, llamadas al modelo y tokens (con los que DeepSeek
+sirvió desde su caché, que cobra más barato).
+
+**Costo aproximado por turno:** ~3 400 tokens de entrada por llamada (prompt ~900,
+herramientas ~1 000, historial y contexto). Una pregunta de datos usa 2 llamadas
+(pedir la herramienta y responder); una de glosario, 1.
 
 ### RAG (`app/rag`)
 

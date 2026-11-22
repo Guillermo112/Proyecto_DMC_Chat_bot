@@ -21,6 +21,8 @@ IMPORTANTE:
 """
 
 import logging
+import threading
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, APIRouter, HTTPException, Query, Path as PathParam
@@ -28,6 +30,8 @@ from fastapi.responses import JSONResponse
 from sqlite3 import IntegrityError, OperationalError, DatabaseError
 
 from app import config
+from app.api.chat import paginas as chat_paginas
+from app.api.chat import router as chat_router
 from app.api.cliente import router as cliente_router
 from app.auth.rutas import router as auth_router
 from app.data import get_connection
@@ -48,16 +52,38 @@ from app.data.anticipa_crud_por_entidad import (
     ParametroCRUD,
 )
 
+@asynccontextmanager
+async def ciclo_de_vida(_: FastAPI):
+    """Precarga el índice del RAG en segundo plano: la API abre al instante y el primer
+    mensaje del chat no espera los ~10 s de leer los PDF y cargar el modelo."""
+    def _precargar() -> None:
+        try:
+            from app.rag.indice import obtener_indice
+
+            indice = obtener_indice()
+            log.info("rag.listo fragmentos=%s motor=%s", len(indice.fragmentos), indice.motor_usado)
+        except Exception as exc:  # noqa: BLE001 - el chat sigue sin RAG y lo avisa
+            log.warning("rag.no_disponible %s: %s", type(exc).__name__, exc)
+
+    if config.RAG_PRECARGAR:
+        threading.Thread(target=_precargar, daemon=True, name="precargar-rag").start()
+    yield
+
+
 app = FastAPI(
     title="Chatbot Anticipa API",
     description="Endpoints CRUD y operaciones de negocio para probar el chatbot Anticipa.",
     version="1.0.0",
+    lifespan=ciclo_de_vida,
 )
 
 app.include_router(auth_router)
 # API del cliente autenticado (cliente_id solo desde el token). El resto de /api/...
 # es CRUD de desarrollo.
 app.include_router(cliente_router)
+# Chat del cliente (POST /mi/chat, con token) y su página web (/chat).
+app.include_router(chat_router)
+app.include_router(chat_paginas)
 
 log = logging.getLogger(__name__)
 
