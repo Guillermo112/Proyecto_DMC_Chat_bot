@@ -193,6 +193,43 @@ def test_responde_con_escribiendo(armar):
     assert api.enviados() == ["eco: hola"]
 
 
+def test_envia_en_html(armar):
+    bot, api, sesiones = armar()
+    bot.recibir(_mensaje("**saldo** <1>"))
+    _esperar(bot)
+    [envio] = [c for m, c in api.llamadas if m == "sendMessage"]
+    assert envio == {"chat_id": CHAT, "text": "eco: <b>saldo</b> &lt;1&gt;", "parse_mode": "HTML"}
+
+
+def test_html_rechazado_se_reenvia_plano(armar):
+    """[5.4] Si Telegram no acepta el HTML, el cliente igual recibe la respuesta."""
+    bot, api, _ = armar()
+    original = api.__call__
+
+    def rechaza_html(request):
+        cuerpo = json.loads(request.content or b"{}")
+        if cuerpo.get("parse_mode") == "HTML":
+            api.llamadas.append(("sendMessage", cuerpo))
+            return httpx.Response(400, json={"ok": False, "error_code": 400,
+                                             "description": "Bad Request: can't parse entities"})
+        return original(request)
+
+    bot._cliente._http = httpx.Client(transport=httpx.MockTransport(rechaza_html))
+    bot.recibir(_mensaje("**hola**"))
+    _esperar(bot)
+    envios = [c for m, c in api.llamadas if m == "sendMessage"]
+    assert envios[-1] == {"chat_id": CHAT, "text": "eco: **hola**"}
+
+
+def test_respuesta_larga_en_varios_mensajes(armar):
+    bot, api, sesiones = armar()
+    largo = "\n".join("Línea " + "x" * 90 for _ in range(100))  # ~9700 caracteres
+    bot.recibir(_mensaje(largo))
+    _esperar(bot)
+    enviados = api.enviados()
+    assert len(enviados) == 3 and all(len(t) <= 4096 for t in enviados)
+
+
 def test_borra_el_mensaje_del_codigo(armar):
     """[1.7]"""
     bot, api, _ = armar()

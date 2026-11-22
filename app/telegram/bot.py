@@ -14,7 +14,9 @@ números entre corchetes las citan.
 - Un error de red o de Telegram no tumba el bucle ni deja al cliente sin respuesta [5.4];
   un 409 avisa que otro proceso usa el mismo token [5.2].
 
-El arranque dentro de la API (hilo en el `lifespan`) es el paso 6 del plan.
+Las respuestas salen en HTML (negrita) y partidas en mensajes de hasta 4096
+caracteres (`app/telegram/formato.py`). El arranque dentro de la API (hilo en el
+`lifespan`) es el paso 6 del plan.
 """
 from __future__ import annotations
 
@@ -26,6 +28,7 @@ from typing import Any
 
 import httpx
 
+from app.telegram import formato
 from app.telegram.sesiones import Sesiones
 
 log = logging.getLogger(__name__)
@@ -190,10 +193,26 @@ class BotTelegram:
             pass  # es solo el "escribiendo..."
 
     def _enviar(self, chat_id: int, texto: str) -> None:
-        try:
-            self._cliente.llamar("sendMessage", chat_id=chat_id, text=texto)
-        except ErrorTelegram as exc:
-            log.error("telegram.no_se_envio chat=%s %s", chat_id, exc)
+        """Envía en HTML, partido en mensajes de hasta 4096 caracteres (`formato`).
+
+        Si Telegram rechaza el HTML (no debería: se escapa todo), esa parte se reenvía
+        como texto plano: mejor asteriscos a la vista que quedarse callado [5.4].
+        """
+        for parte in formato.partir(texto):
+            try:
+                self._cliente.llamar("sendMessage", chat_id=chat_id, text=formato.a_html(parte),
+                                     parse_mode="HTML")
+                continue
+            except ErrorTelegram as exc:
+                if exc.codigo != 400:
+                    log.error("telegram.no_se_envio chat=%s %s", chat_id, exc)
+                    return
+                log.warning("telegram.html_rechazado chat=%s %s", chat_id, exc)
+            try:
+                self._cliente.llamar("sendMessage", chat_id=chat_id, text=parte)
+            except ErrorTelegram as exc:
+                log.error("telegram.no_se_envio chat=%s %s", chat_id, exc)
+                return
 
     # -- bucle --------------------------------------------------------------------
     def ejecutar(self, parar: threading.Event) -> None:

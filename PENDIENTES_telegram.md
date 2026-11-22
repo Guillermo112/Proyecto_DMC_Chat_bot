@@ -65,11 +65,12 @@ paso se implementan); al terminar un paso, marcarlas ✅ allí.
    (solo privados, lista de permitidos, solo texto), una cola por chat atendida por un
    hilo a la vez en un pool de `TELEGRAM_HILOS` (tope de 10 pendientes por chat),
    `typing`, borrado del código, y un bucle que reintenta con espera creciente (respeta
-   `retry_after`), avisa el 409 y se detiene ante un 401. Los textos salen planos hasta
-   el paso 5. Tests: `tests/test_telegram_bot.py` con `httpx.MockTransport`.
-5. [ ] **Formato de salida:** `parse_mode=HTML`, escapando el texto y convirtiendo
-   `**negrita**` a `<b>` (como `formatear()` en `app/static/chat.html`). Cortar en
-   mensajes de hasta 4096 caracteres.
+   `retry_after`), avisa el 409 y se detiene ante un 401. Tests: `tests/test_telegram_bot.py` con `httpx.MockTransport`.
+5. [x] **Formato de salida** (hecho): `app/telegram/formato.py`. `a_html` escapa `&`, `<`,
+   `>` y convierte `**negrita**` a `<b>` (como `formatear()` de la web); `partir` corta en
+   mensajes cuyo HTML cabe en 4096, entre líneas y, si no alcanza, por palabras. El bot
+   envía con `parse_mode=HTML` y, si Telegram rechaza el HTML, reenvía esa parte en texto
+   plano. Tests: `tests/test_telegram_formato.py` y `tests/test_telegram_bot.py`.
 6. [ ] **Arranque** en el `lifespan` de `app/main.py` (hilo daemon, solo con token) y
    parada ordenada al cerrar la API.
 7. [ ] **Tests** con `httpx.MockTransport` (sin red ni token):
