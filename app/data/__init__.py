@@ -1,5 +1,6 @@
 from app.data.conexion import get_connection
 from app.data.facturacion import (
+    comparar_periodos,
     detalle_factura,
     listar_facturas,
     obtener_cliente,
@@ -9,6 +10,7 @@ from app.data.facturacion import (
 
 __all__ = [
     "get_connection",
+    "comparar_periodos",
     "detalle_factura",
     "listar_facturas",
     "obtener_cliente",

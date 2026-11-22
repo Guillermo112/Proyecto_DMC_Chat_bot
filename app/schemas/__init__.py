@@ -1,23 +1,33 @@
 from app.schemas.facturacion import (
     Cliente,
+    ComparacionPeriodos,
     FacturaDetalle,
     FacturaResumen,
+    LineaComparada,
     LineaFactura,
+    LineaPeriodo,
     NotaCreditoAplicada,
     PaginaFacturas,
+    PeriodoComparado,
     ResumenFacturacion,
     ResumenPeriodo,
     SaldoPendiente,
+    Servicio,
 )
 
 __all__ = [
     "Cliente",
+    "ComparacionPeriodos",
     "FacturaDetalle",
     "FacturaResumen",
+    "LineaComparada",
     "LineaFactura",
+    "LineaPeriodo",
     "NotaCreditoAplicada",
     "PaginaFacturas",
+    "PeriodoComparado",
     "ResumenFacturacion",
     "ResumenPeriodo",
     "SaldoPendiente",
+    "Servicio",
 ]

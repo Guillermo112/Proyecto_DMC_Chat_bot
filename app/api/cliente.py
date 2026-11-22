@@ -17,7 +17,14 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
 from app.auth.sesion import cliente_actual
 from app.data import facturacion
-from app.schemas import Cliente, FacturaDetalle, PaginaFacturas, ResumenFacturacion, SaldoPendiente
+from app.schemas import (
+    Cliente,
+    ComparacionPeriodos,
+    FacturaDetalle,
+    PaginaFacturas,
+    ResumenFacturacion,
+    SaldoPendiente,
+)
 from app.schemas.facturacion import EstadoFactura
 
 router = APIRouter(
@@ -27,6 +34,9 @@ router = APIRouter(
     dependencies=[Depends(cliente_actual)],
     responses={401: {"description": "Falta el token de sesión, es inválido o expiró"}},
 )
+
+
+PATRON_PERIODO = r"^[0-9]{4}-(0[1-9]|1[0-2])$"  # AAAA-MM; [0-9] y no \d (dígitos Unicode)
 
 
 def _400(func, *args, **kwargs):
@@ -51,7 +61,7 @@ def mis_facturas(
     cliente_id: int = Depends(cliente_actual),
     periodo: str | None = Query(
         None,
-        pattern=r"^[0-9]{4}-(0[1-9]|1[0-2])$",
+        pattern=PATRON_PERIODO,
         description="Mes facturado (AAAA-MM). La factura de 2026-09 se emite el 2026-10-01",
     ),
     fecha_desde: date | None = Query(None, description="Emisión desde (AAAA-MM-DD)"),
@@ -92,3 +102,19 @@ def mi_resumen(
 ):
     """Totales por periodo entre dos fechas de emisión (excluye anuladas)."""
     return _400(facturacion.resumen_facturacion, cliente_id, fecha_desde, fecha_hasta)
+
+
+@router.get("/comparar", response_model=ComparacionPeriodos)
+def mi_comparacion(
+    periodo_b: str = Query(..., pattern=PATRON_PERIODO, description="Periodo a explicar (AAAA-MM)"),
+    periodo_a: str | None = Query(
+        None, pattern=PATRON_PERIODO, description="Periodo de referencia (AAAA-MM); por defecto, el mes anterior"
+    ),
+    cliente_id: int = Depends(cliente_actual),
+):
+    """Qué cambió entre dos periodos facturados: totales sin IGV y líneas nuevas, eliminadas o cambiadas.
+
+    Si un periodo no tiene facturas o tiene más de una vigente (posible duplicado),
+    responde `comparable: false` con el `motivo` y sin variación: no suma ni elige una.
+    """
+    return _400(facturacion.comparar_periodos, cliente_id, periodo_b, periodo_a)

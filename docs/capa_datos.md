@@ -85,7 +85,37 @@ inclusive). Excluye facturas anuladas.
 - **Devuelve:** lista `periodos` (`periodo`, `cantidad_facturas`,
   `subtotal`, `igv`, `total`) y los totales del rango.
 - **Errores:** `ValueError` si falta una fecha o `fecha_desde > fecha_hasta`.
-- **Uso en el agente:** CS-09 (variación fuerte entre periodos).
+- **Uso en el agente:** ver la evolución de varios meses. Para explicar una
+  subida concreta (CS-09) usar `comparar_periodos`.
+- **Ojo:** un periodo con duplicado se suma (`cantidad_facturas = 2`); todavía
+  no cumple la regla de la sección 4.
+
+### `comparar_periodos(cliente_id, periodo_b, periodo_a=None) -> ComparacionPeriodos`
+
+Qué cambió entre dos periodos facturados (`AAAA-MM`). Si falta `periodo_a`, se
+usa el mes anterior a `periodo_b`. Excluye facturas anuladas.
+
+- **Tablas:** `factura`, `factura_linea`, `servicio_contratado`, `producto`.
+- **Devuelve:** cada periodo con sus facturas y totales; `variacion_subtotal`
+  y `variacion_pct` (sin IGV); `variacion_fuerte` si supera
+  `UMBRAL_VARIACION_PCT` (25 %, el de `v_variacion_facturacion`); `lineas`
+  (solo las que cambiaron) y `lineas_sin_cambio`.
+- **Cada línea comparada:** `cambio` (`nueva`, `eliminada`, `cambiada`),
+  `antes` y `despues`, `campos_cambiados`, `diferencia_monto` y el `servicio`
+  (sede, producto, `fecha_activacion`, `fecha_baja`), que explica la causa.
+- **Emparejamiento:** por servicio y clase de cargo. `cargo_mensual` y
+  `prorrateo` son la misma clase, así un servicio que pasa de prorrateo a mes
+  completo sale como `cambiada` (cliente 9, CS-10); `exceso` y `ajuste` van
+  aparte, así un exceso nuevo sale como `nueva` (cliente 4, CS-04).
+- **Sin comparación** (`comparable = false`, variación y líneas en `None`):
+  `motivo = "facturas_multiples"` si algún periodo tiene más de una factura
+  vigente (regla de la sección 4, CS-01) o `"periodo_sin_facturas"`.
+- **Errores:** `ValueError` si un periodo está mal formado o
+  `periodo_a >= periodo_b`.
+- **Uso en el agente:** CS-09; también da señales de CS-04 y CS-10.
+- **Limitación:** solo compara lo que cambió entre dos facturas. Un cargo que
+  se repite igual cada mes (por ejemplo, el servicio dado de baja de CS-02)
+  sale como "sin cambio"; eso lo detectará `detectar_anomalias`.
 
 ## 3. Casuísticas y funciones
 
@@ -95,14 +125,23 @@ inclusive). Excluye facturas anuladas.
 | CS-02 a CS-05, CS-07 | `detalle_factura` | El cálculo de ajustes usa las vistas de detección; pendiente. |
 | CS-06 Solicitud fuera de plazo | — | Pendiente (`solicitud`, `v_solicitudes_vencidas`). |
 | CS-08 Gesto comercial | — | Pendiente (`v_gestos_mes_actual`). |
-| CS-09 Variación de facturación | `resumen_facturacion` | |
-| CS-10 Prorrateo | `detalle_factura` | Línea de tipo `prorrateo`. |
+| CS-09 Variación de facturación | `comparar_periodos` | Líneas que cambiaron y su servicio (alta o baja). |
+| CS-10 Prorrateo | `detalle_factura`, `comparar_periodos` | Línea de tipo `prorrateo`; la fecha de activación viene en el `servicio` de la comparación. |
 | CS-11 Saldo y vencida | `saldo_pendiente` | |
 | CS-12 Identificación | — | Fuera de esta capa. |
 | CS-13 Fuera de alcance | `obtener_cliente` | Datos del ejecutivo para derivar. |
 
 ## 4. Particularidades de los datos
 
+- **Un periodo puede tener más de una factura vigente** (duplicado de CS-01:
+  cliente 1, 2026-11). Regla para toda función que agregue por periodo: **no
+  sumarlas ni elegir una**; devolver un aviso con los números e importes y
+  dejar sin calcular lo que dependa del total. Sumarlas presentaría el
+  duplicado como una subida explicable (CS-09) y daría por válidas las dos
+  facturas, que es lo que CS-01 prohíbe afirmar. Detalle en
+  `PENDIENTES_datos.md` (comparación entre periodos y saldo).
+  *Excepción conocida:* `saldo_pendiente` y `resumen_facturacion` todavía
+  suman; ver la sección 2 de `PENDIENTES_datos.md`.
 - No hay tabla de pagos: el saldo se deduce del `estado` de la factura.
 - Montos en `REAL`: se redondean a 2 decimales en los totales.
 - Los comentarios CS-xx de `schema.sql` usan una numeración distinta a la de

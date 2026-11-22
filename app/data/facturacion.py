@@ -13,18 +13,25 @@ from app import config
 from app.data.conexion import get_connection
 from app.schemas import (
     Cliente,
+    ComparacionPeriodos,
     FacturaDetalle,
     FacturaResumen,
+    LineaComparada,
     LineaFactura,
+    LineaPeriodo,
     NotaCreditoAplicada,
     PaginaFacturas,
+    PeriodoComparado,
     ResumenFacturacion,
     ResumenPeriodo,
     SaldoPendiente,
+    Servicio,
 )
 
 ESTADOS_FACTURA = {"emitida", "pagada", "vencida", "en_disputa", "anulada"}
 ESTADOS_PENDIENTES = ("emitida", "vencida", "en_disputa")
+# Mismo umbral que la vista v_variacion_facturacion (db/schema.sql).
+UMBRAL_VARIACION_PCT = 25.0
 _PATRON_PERIODO = re.compile(r"[0-9]{4}-(0[1-9]|1[0-2])")  # [0-9], no \d: \d acepta dígitos Unicode
 
 _COLUMNAS_FACTURA = """
@@ -232,4 +239,156 @@ def resumen_facturacion(
         subtotal=round(sum(p.subtotal for p in periodos), 2),
         igv=round(sum(p.igv for p in periodos), 2),
         total=round(sum(p.total for p in periodos), 2),
+    )
+
+
+# ------------------------------------------------- comparación entre periodos
+
+def _periodo_anterior(periodo: str) -> str:
+    anio, mes = int(periodo[:4]), int(periodo[5:])
+    return f"{anio - 1}-12" if mes == 1 else f"{anio}-{mes - 1:02d}"
+
+
+def _facturas_vigentes(con, cliente_id: int, periodos: list[str]) -> dict[str, list[FacturaResumen]]:
+    """Facturas no anuladas del cliente, agrupadas por periodo.
+
+    Un periodo con más de una es un posible duplicado (CS-01): quien llame no
+    debe sumarlas ni elegir una (regla en docs/capa_datos.md, sección 4).
+    """
+    marcadores = ", ".join("?" for _ in periodos)  # solo marcadores fijos
+    filas = con.execute(
+        f"SELECT {_COLUMNAS_FACTURA} FROM factura f "
+        f"WHERE f.id_cliente = ? AND f.estado <> 'anulada' AND f.periodo IN ({marcadores}) "
+        "ORDER BY f.periodo, f.id_factura",
+        [cliente_id, *periodos],
+    ).fetchall()
+    resultado: dict[str, list[FacturaResumen]] = {p: [] for p in periodos}
+    for fila in filas:
+        resultado[fila["periodo"]].append(_factura(fila))
+    return resultado
+
+
+def _lineas_con_servicio(con, cliente_id: int, id_factura: int) -> dict:
+    """Líneas de una factura del cliente, indexadas por (servicio, clase de cargo)."""
+    filas = con.execute(
+        """
+        SELECT l.id_linea, l.id_servicio, l.tipo, l.concepto, l.cantidad, l.precio_unitario, l.monto,
+               s.codigo_producto, p.nombre AS producto, s.sede, s.cantidad AS s_cantidad,
+               s.tarifa_pactada, s.sla_pactado, s.fecha_activacion, s.fecha_baja, s.estado AS s_estado
+        FROM factura_linea l
+        JOIN factura f ON f.id_factura = l.id_factura
+        LEFT JOIN servicio_contratado s ON s.id_servicio = l.id_servicio AND s.id_cliente = f.id_cliente
+        LEFT JOIN producto p ON p.codigo = s.codigo_producto
+        WHERE l.id_factura = ? AND f.id_cliente = ?
+        ORDER BY l.id_linea
+        """,
+        (id_factura, cliente_id),
+    ).fetchall()
+    lineas: dict = {}
+    for f in filas:
+        # cargo_mensual y prorrateo son la misma clase: el prorrateo pasa a mes completo.
+        clase = "cargo" if f["tipo"] in ("cargo_mensual", "prorrateo") else f["tipo"]
+        clave = (f["id_servicio"], clase)
+        if f["id_servicio"] is None or clave in lineas:  # sin servicio o repetida: no se empareja a ciegas
+            clave = (f["id_servicio"], clase, f["concepto"], f["id_linea"])
+        servicio = None
+        if f["codigo_producto"] is not None:
+            servicio = Servicio(
+                id_servicio=f["id_servicio"], codigo_producto=f["codigo_producto"], producto=f["producto"],
+                sede=f["sede"], cantidad=f["s_cantidad"], tarifa_pactada=f["tarifa_pactada"],
+                sla_pactado=f["sla_pactado"], fecha_activacion=f["fecha_activacion"],
+                fecha_baja=f["fecha_baja"], estado=f["s_estado"],
+            )
+        linea = LineaPeriodo(**{k: f[k] for k in LineaPeriodo.model_fields})
+        lineas[clave] = (linea, servicio)
+    return lineas
+
+
+def _campos_cambiados(antes: LineaPeriodo, despues: LineaPeriodo) -> list[str]:
+    campos = ["tipo"] if antes.tipo != despues.tipo else []
+    campos += [c for c in ("cantidad", "precio_unitario", "monto")
+               if abs(getattr(antes, c) - getattr(despues, c)) > 0.005]
+    return campos
+
+
+def _diferencias(antes: dict, despues: dict) -> tuple[list[LineaComparada], int]:
+    """Líneas nuevas, eliminadas o cambiadas, y cuántas quedaron igual."""
+    cambiadas: list[LineaComparada] = []
+    sin_cambio = 0
+    for clave in [*antes, *(k for k in despues if k not in antes)]:
+        la, sa = antes.get(clave, (None, None))
+        ld, sd = despues.get(clave, (None, None))
+        if la is None or ld is None:
+            cambio, campos = ("nueva" if la is None else "eliminada"), []
+        else:
+            campos = _campos_cambiados(la, ld)
+            if not campos:
+                sin_cambio += 1
+                continue
+            cambio = "cambiada"
+        cambiadas.append(LineaComparada(
+            cambio=cambio, servicio=sd or sa, antes=la, despues=ld, campos_cambiados=campos,
+            diferencia_monto=round((ld.monto if ld else 0) - (la.monto if la else 0), 2),
+        ))
+    return cambiadas, sin_cambio
+
+
+def comparar_periodos(
+    cliente_id: int,
+    periodo_b: str,
+    periodo_a: str | None = None,
+    db_path: Path | None = None,
+) -> ComparacionPeriodos:
+    """Qué cambió entre dos periodos facturados del cliente (CS-09).
+
+    `periodo_a` es el anterior; si falta, se usa el mes previo a `periodo_b`.
+    Compara subtotales (sin IGV) y líneas, emparejadas por servicio. Excluye
+    facturas anuladas. Si un periodo no tiene facturas o tiene más de una
+    vigente, no compara: `comparable=False` y `motivo` (ver ComparacionPeriodos).
+    """
+    _validar_cliente_id(cliente_id)
+    periodo_b = _validar_periodo(periodo_b)
+    periodo_a = _periodo_anterior(periodo_b) if periodo_a is None else _validar_periodo(periodo_a)
+    if periodo_a >= periodo_b:
+        raise ValueError("periodo_a debe ser anterior a periodo_b")
+
+    with get_connection(db_path) as con:
+        facturas = _facturas_vigentes(con, cliente_id, [periodo_a, periodo_b])
+
+        def resumen(periodo: str) -> PeriodoComparado:
+            fs = facturas[periodo]
+            unica = fs[0] if len(fs) == 1 else None
+            return PeriodoComparado(
+                periodo=periodo, facturas=fs,
+                subtotal=unica.subtotal if unica else None,
+                igv=unica.igv if unica else None,
+                total=unica.total if unica else None,
+            )
+
+        a, b = resumen(periodo_a), resumen(periodo_b)
+        cantidades = (len(a.facturas), len(b.facturas))
+        if max(cantidades) > 1:
+            motivo = "facturas_multiples"
+        elif min(cantidades) == 0:
+            motivo = "periodo_sin_facturas"
+        else:
+            motivo = None
+        base = dict(periodo_a=a, periodo_b=b, umbral_variacion_pct=UMBRAL_VARIACION_PCT)
+        if motivo is not None:
+            return ComparacionPeriodos(
+                **base, comparable=False, motivo=motivo, variacion_subtotal=None, variacion_pct=None,
+                variacion_fuerte=None, lineas=None, lineas_sin_cambio=None,
+            )
+
+        lineas, sin_cambio = _diferencias(
+            _lineas_con_servicio(con, cliente_id, a.facturas[0].id_factura),
+            _lineas_con_servicio(con, cliente_id, b.facturas[0].id_factura),
+        )
+
+    variacion = round(b.subtotal - a.subtotal, 2)
+    pct = round(variacion / a.subtotal * 100, 2) if a.subtotal else None
+    return ComparacionPeriodos(
+        **base, comparable=True, motivo=None, variacion_subtotal=variacion, variacion_pct=pct,
+        variacion_fuerte=None if pct is None else abs(pct) > UMBRAL_VARIACION_PCT,
+        lineas=lineas, lineas_sin_cambio=sin_cambio,
     )

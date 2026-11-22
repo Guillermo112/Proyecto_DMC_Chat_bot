@@ -91,3 +91,70 @@ class ResumenFacturacion(BaseModel):
 
 
 
+
+
+# ------------------------------------------------- comparación entre periodos
+
+class Servicio(BaseModel):
+    """Servicio contratado: explica por qué aparece, cambia o desaparece una línea."""
+    id_servicio: int
+    codigo_producto: str
+    producto: str
+    sede: str
+    cantidad: int
+    tarifa_pactada: float
+    sla_pactado: float | None
+    fecha_activacion: str
+    fecha_baja: str | None
+    estado: str
+
+
+class LineaPeriodo(BaseModel):
+    tipo: str
+    concepto: str
+    cantidad: float
+    precio_unitario: float
+    monto: float
+
+
+class LineaComparada(BaseModel):
+    """Una línea que cambió entre `periodo_a` (antes) y `periodo_b` (después).
+
+    Se emparejan por servicio y clase de cargo: `cargo_mensual` y `prorrateo` son
+    la misma clase, así un servicio que pasa de prorrateo a mes completo sale
+    como `cambiada` y no como una eliminada más una nueva.
+    """
+    cambio: Literal["nueva", "eliminada", "cambiada"]
+    servicio: Servicio | None
+    antes: LineaPeriodo | None
+    despues: LineaPeriodo | None
+    campos_cambiados: list[Literal["tipo", "cantidad", "precio_unitario", "monto"]]
+    diferencia_monto: float
+
+
+class PeriodoComparado(BaseModel):
+    periodo: str
+    facturas: list[FacturaResumen]
+    # Solo con exactamente una factura vigente; si no, None (nunca 0).
+    subtotal: float | None
+    igv: float | None
+    total: float | None
+
+
+class ComparacionPeriodos(BaseModel):
+    """Diferencia entre dos periodos facturados (sin IGV, excluye anuladas).
+
+    Si un periodo no tiene facturas o tiene más de una vigente (duplicado de
+    CS-01), `comparable` es False, `motivo` lo explica y la variación y las
+    líneas quedan en None: no se suman ni se elige una factura.
+    """
+    periodo_a: PeriodoComparado
+    periodo_b: PeriodoComparado
+    comparable: bool
+    motivo: Literal["facturas_multiples", "periodo_sin_facturas"] | None
+    umbral_variacion_pct: float
+    variacion_subtotal: float | None
+    variacion_pct: float | None
+    variacion_fuerte: bool | None
+    lineas: list[LineaComparada] | None
+    lineas_sin_cambio: int | None
