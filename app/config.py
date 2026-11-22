@@ -30,6 +30,8 @@ OTP_MINUTOS_VALIDEZ = int(os.getenv("OTP_MINUTOS_VALIDEZ", "10"))
 OTP_MAX_INTENTOS = int(os.getenv("OTP_MAX_INTENTOS", "3"))
 OTP_ESPERA_REENVIO_SEG = int(os.getenv("OTP_ESPERA_REENVIO_SEG", "60"))
 
-# Clave del HMAC del OTP (y más adelante del JWT de sesión).
-# Vacío = no se pueden emitir códigos (se valida al usarlo, no al importar).
+# Clave del HMAC del OTP y de la firma del JWT de sesión.
+# Vacío = no se pueden emitir códigos ni tokens (se valida al usarlo, no al importar).
 AUTH_SECRET = os.getenv("AUTH_SECRET", "")
+# Duración del token de sesión tras verificar el código. Sin logout.
+AUTH_MINUTOS_SESION = int(os.getenv("AUTH_MINUTOS_SESION", "30"))

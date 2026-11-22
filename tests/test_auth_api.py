@@ -34,7 +34,12 @@ def test_flujo_completo(cliente):
     id_v = r.json()["id_verificacion"]
     r = api.post("/auth/verificar-codigo", json={"id_verificacion": id_v, "codigo": _codigo(enviados)})
     assert r.status_code == 200
-    assert r.json() == {"verificado": True, "cliente_id": 1}
+    datos = r.json()
+    assert datos["verificado"] is True and datos["cliente_id"] == 1
+    assert datos["token_type"] == "bearer" and datos["expira_en"] == config.AUTH_MINUTOS_SESION * 60
+    # El token identifica al cliente verificado en las peticiones siguientes.
+    r = api.get("/auth/sesion", headers={"Authorization": f"Bearer {datos['access_token']}"})
+    assert r.status_code == 200 and r.json() == {"cliente_id": 1}
 
 
 def test_codigo_incorrecto_es_401(cliente):
@@ -90,3 +95,11 @@ def test_crud_de_verificaciones_no_expuesto(cliente, metodo, ruta):
     api, *_ = cliente
     r = getattr(api, metodo)(ruta, **({"json": {}} if metodo in ("put", "post") else {}))
     assert r.status_code in (404, 405)
+
+
+def test_verificar_sin_secreto_es_503(cliente, monkeypatch):
+    api, enviados, ruc, _ = cliente
+    id_v = api.post("/auth/solicitar-codigo", json={"ruc": ruc}).json()["id_verificacion"]
+    monkeypatch.setattr(config, "AUTH_SECRET", "")
+    r = api.post("/auth/verificar-codigo", json={"id_verificacion": id_v, "codigo": _codigo(enviados)})
+    assert r.status_code == 503

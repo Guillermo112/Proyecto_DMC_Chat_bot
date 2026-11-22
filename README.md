@@ -85,10 +85,18 @@ Por HTTP (`app/auth/rutas.py`):
   La respuesta es la misma exista o no el RUC. 422 si el RUC no tiene 11 dígitos,
   429 si se pide otro código antes de tiempo, 503 si falla el correo.
 - `POST /auth/verificar-codigo` `{"id_verificacion", "codigo"}` →
-  `{"verificado": true, "cliente_id"}` o 401.
+  `{"verificado": true, "cliente_id", "access_token", "token_type": "bearer", "expira_en"}`
+  o 401. `access_token` es un JWT (HS256, firmado con `AUTH_SECRET`) que vence en
+  `AUTH_MINUTOS_SESION` minutos (30 por defecto). No hay logout: un token no se puede
+  anular antes de vencer, salvo cambiando `AUTH_SECRET` (cierra todas las sesiones).
+- `GET /auth/sesion` con `Authorization: Bearer <access_token>` → `{"cliente_id"}`,
+  o 401 si falta, es inválido o expiró.
+
+En el código, las rutas con datos de cliente toman el cliente de la sesión con
+`cliente_id: int = Depends(cliente_actual)` (`app/auth/sesion.py`), nunca de lo que
+escriba el usuario.
 
 La tabla `verificacion` no está en el CRUD de `/api/...`: solo se toca vía `/auth`.
-Aún no se emite token de sesión tras verificar.
 
 Prueba en vivo:
 

@@ -2,15 +2,16 @@
 
 Única vía HTTP para tocar la tabla `verificacion`: el CRUD genérico no la expone.
 
-Pendiente: tras verificar no se emite todavía un token de sesión; los endpoints
-con datos de cliente deberán exigirlo cuando exista.
+Al verificar el código se devuelve un token de sesión (app/auth/sesion.py) que
+las rutas con datos de cliente exigen con `Depends(cliente_actual)`.
 """
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.auth import otp
+from app.auth.sesion import cliente_actual, emitir_token
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +38,13 @@ class VerificacionCodigo(BaseModel):
 class RespuestaVerificacion(BaseModel):
     verificado: bool
     cliente_id: int
+    access_token: str
+    token_type: str = "bearer"
+    expira_en: int = Field(..., description="Segundos de validez del token")
+
+
+class RespuestaSesion(BaseModel):
+    cliente_id: int
 
 
 @router.post("/solicitar-codigo", response_model=RespuestaSolicitud)
@@ -54,7 +62,18 @@ def solicitar_codigo(body: SolicitudCodigo):
 
 @router.post("/verificar-codigo", response_model=RespuestaVerificacion)
 def verificar_codigo(body: VerificacionCodigo):
-    cliente_id = otp.verificar_codigo(body.id_verificacion, body.codigo)
-    if cliente_id is None:
-        raise HTTPException(status_code=401, detail="Código incorrecto, vencido o bloqueado")
-    return RespuestaVerificacion(verificado=True, cliente_id=cliente_id)
+    try:
+        cliente_id = otp.verificar_codigo(body.id_verificacion, body.codigo)
+        if cliente_id is None:
+            raise HTTPException(status_code=401, detail="Código incorrecto, vencido o bloqueado")
+        token, segundos = emitir_token(cliente_id)
+    except RuntimeError as exc:  # AUTH_SECRET no configurado
+        log.error("No se pudo verificar/emitir sesión: %s", exc)
+        raise HTTPException(status_code=503, detail="Autenticación no disponible") from exc
+    return RespuestaVerificacion(verificado=True, cliente_id=cliente_id, access_token=token, expira_en=segundos)
+
+
+@router.get("/sesion", response_model=RespuestaSesion)
+def sesion(cliente_id: int = Depends(cliente_actual)):
+    """Cliente de la sesión actual (comprueba que el token sigue vigente)."""
+    return RespuestaSesion(cliente_id=cliente_id)
