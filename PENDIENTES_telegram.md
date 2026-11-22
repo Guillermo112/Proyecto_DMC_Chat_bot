@@ -52,22 +52,17 @@ paso se implementan); al terminar un paso, marcarlas ✅ allí.
    `.env.example`. `TELEGRAM_USUARIOS_PERMITIDOS` mal escrita es un error al arrancar (si
    se saltara, una lista que queda vacía abriría el bot a cualquiera). Tests en
    `tests/test_config_telegram.py`.
-3. [ ] **Sesiones del bot** (`app/telegram/sesiones.py`): máquina de estados por `chat_id`,
-   sin red ni Telegram, fácil de probar.
-   - `sin_identificar` → pide el RUC (11 dígitos) → `otp.solicitar_codigo(ruc)`.
-   - `esperando_codigo` → pide el código (6 dígitos) → `otp.verificar_codigo(id, codigo)`.
-   - Id de conversación `tg-<chat_id>`: así no choca con los ids que genera la web
-     (las conversaciones se separan por `(cliente_id, conversacion_id)`).
-   - `identificado` (con `cliente_id` y hora de vencimiento) → los mensajes van a
-     `ServicioChat.responder(..., canal="telegram")`. Al verificar, `servicio.saludar()`.
-   - Sesión vencida → vuelve a `sin_identificar` y lo dice.
-   - Mismo mensaje exista o no el RUC (como `app/auth/rutas.py`).
-   - Límite de solicitudes por `chat_id`, reutilizando el limitador de `app/auth/limite.py`.
+3. [x] **Sesiones del bot** (hecho): `app/telegram/sesiones.py`, máquina de estados por
+   `chat_id` sin red (`ESPERANDO_RUC` → `ESPERANDO_CODIGO` → `IDENTIFICADO`). Reutiliza
+   `otp.solicitar_codigo` / `otp.verificar_codigo` y el limitador de `app/auth/limite.py`
+   con el chat como clave. Conversación `tg-<chat_id>`, sesión con vencimiento, tope de
+   sesiones en memoria y `borrar_mensaje` para el mensaje del código. Los comandos
+   (`/start`, `/nuevo`, `/salir`, ayuda) se resolvieron aquí: son lógica, no transporte.
+   Tests: `tests/test_telegram_sesiones.py` (incluye uno con el OTP real y la base copiada).
 4. [ ] **Cliente de Telegram y despacho** (`app/telegram/bot.py`):
    - Bucle `getUpdates` con `timeout` largo y `offset`. Al arrancar descarta los
      pendientes (Telegram los guarda ~24 h) y llama a `deleteWebhook`.
-   - Comandos: `/start` (identificarse), `/nuevo` (borra el historial: `reiniciar`),
-     `/salir` (además olvida la sesión).
+   - Comandos: ya resueltos en `Sesiones` (paso 3); el bot solo pasa el texto.
    - Solo texto: a fotos, audios o stickers responde que solo atiende texto.
    - Pool de `TELEGRAM_HILOS` hilos, **en orden por chat** (el `deque` del historial no
      tiene candado: dos mensajes del mismo chat no pueden procesarse a la vez).
