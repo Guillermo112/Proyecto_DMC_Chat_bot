@@ -180,7 +180,6 @@ se cierre antes de leerla. Desde PowerShell se escribe con `.\` delante:
    |---|---|
    | `CORREO_PRUEBA_n` | Tu correo, en **tu slot** `n` (1 a 5; acuérdenlo en el equipo, uno por integrante). Ahí te llegará el código OTP |
    | `NOMBRE_PRUEBA_n` | Tu nombre (opcional; el chat te saluda con él) |
-   | `CORREO_EJECUTIVO_n` | (Opcional) Un correo tuyo en **tu mismo slot**: recibirás, como si fueras el ejecutivo, el aviso de los casos que el chat deriva. Requiere `NOTIFICAR_DERIVACIONES=true` y `CORREO_DERIVACIONES` vacío. El nombre del ejecutivo no cambia |
    | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_REMITENTE` | La cuenta que **envía** los códigos. Con Gmail: `smtp.gmail.com`, `587` y una [contraseña de aplicación](https://myaccount.google.com/apppasswords) (no tu contraseña normal) |
    | `ENTORNO` | Déjalo en `dev` (ya viene así): habilita el banco de pruebas y el CRUD de desarrollo |
    | `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` | El modelo del chat. Para DeepSeek: `https://api.deepseek.com`, la clave del equipo y el modelo acordado. Sin esto, todo funciona salvo `/chat` |
@@ -255,8 +254,8 @@ se cierre antes de leerla. Desde PowerShell se escribe con `.\` delante:
 | Descargaste el proyecto por primera vez | [Primera vez](#primera-vez), pasos 1 a 5 |
 | Necesitas un RUC para probar | `clientes_prueba.bat` (o `clientes_prueba.bat copiar N`) |
 | No sabes qué preguntarle al chat, o vas a ensayar la demo | [`docs/guion_demo.md`](docs/guion_demo.md): preguntas por cliente y el guion de 5 minutos |
-| Pusiste o cambiaste tu correo (`CORREO_PRUEBA_n`), tu nombre o el correo del ejecutivo (`CORREO_EJECUTIVO_n`) en `.env` | `regenerar_base.bat` |
-| Quieres ver llegar el aviso de un caso derivado | `CORREO_EJECUTIVO_n` de tu slot, `NOTIFICAR_DERIVACIONES=true`, `CORREO_DERIVACIONES` vacío, `regenerar_base.bat` y reiniciar `run.bat` |
+| Pusiste o cambiaste tu correo (`CORREO_PRUEBA_n`) o tu nombre en `.env` | `regenerar_base.bat` |
+| Quieres ver llegar el aviso de un caso derivado | `CORREO_DERIVACIONES` con tu correo y `NOTIFICAR_DERIVACIONES=true` (solo en `ENTORNO=dev`), y reiniciar `run.bat` |
 | Hiciste `git pull` y cambió `requirements.txt` | `install.bat` (instala solo lo que falta) |
 | Hiciste `git pull` y cambió `db/schema.sql` o `db/generar_datos.py` | `regenerar_base.bat` |
 | Falla una prueba que pide regenerar la base (p. ej. `test_la_base_admite_el_canal_web`) | `regenerar_base.bat` |
@@ -283,7 +282,6 @@ suyo. `.env.example` es solo la plantilla: la app no lo lee, y si cambia no actu
 |---|---|
 | `CORREO_PRUEBA_1` … `CORREO_PRUEBA_5` | Correo de cada integrante para recibir el OTP. Clientes por slot: 1 → 1, 6, 11 · 2 → 2, 7, 12 · 3 → 3, 8, 13 · 4 → 4, 9 · 5 → 5, 10. Vacío = esos clientes quedan con `facturacion@clienteNN.example`. Requiere `regenerar_base.bat` |
 | `NOMBRE_PRUEBA_1` … `NOMBRE_PRUEBA_5` | Nombre del contacto (opcional; el chat saluda con el primer nombre) |
-| `CORREO_EJECUTIVO_1` … `CORREO_EJECUTIVO_5` | Correo del ejecutivo de los clientes de cada slot (todos los clientes de un slot comparten ejecutivo: 1 → Jorge Salazar, 2 → Lucía Paredes, 3 → Diego Quispe, 4 → Rosa Huamán, 5 → Carla Mendoza). Recibe el aviso de los casos derivados con `NOTIFICAR_DERIVACIONES=true`. Solo cambia el correo, no el nombre. Vacío = `@anticipa.example` (no recibe). Requiere `regenerar_base.bat` |
 | `SMTP_HOST`, `SMTP_PORT` (`587`), `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_REMITENTE` | Cuenta que envía el código OTP. Puerto 465 = SSL; otro = STARTTLS |
 | `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` | Modelo del chat (cualquier endpoint compatible; el equipo usa DeepSeek). Sin ellos, `/chat` responde que el asistente no está disponible. Respaldos: `LLM_2_*` … `LLM_9_*` |
 
@@ -299,7 +297,7 @@ suyo. `.env.example` es solo la plantilla: la app no lo lee, y si cambia no actu
 |---|---|---|
 | `ENTORNO` | `prod` (la plantilla trae `dev`) | `dev` monta el CRUD `/api/...` y el banco de pruebas `/dev/rag`, **sin autenticación**. Otro valor o vacío los oculta |
 | `NOTIFICAR_DERIVACIONES` | `false` | `true` avisa por correo al ejecutivo al registrar un caso (`POST /mi/casos`) |
-| `CORREO_DERIVACIONES` | — | **Solo con `ENTORNO=dev`:** redirige todos los avisos a una casilla de prueba (el correo dice a quién iba). Fuera de dev se ignora y el aviso va al ejecutivo real, para que un `.env` de desarrollo no desvíe los casos de todos los clientes a una sola casilla. Para recibir el aviso de tu slot, mejor `CORREO_EJECUTIVO_n`. Si falla el SMTP, el caso se registra igual |
+| `CORREO_DERIVACIONES` | — | **Solo con `ENTORNO=dev`:** redirige todos los avisos a una casilla de prueba (el correo dice a quién iba). Fuera de dev se ignora y el aviso va al ejecutivo real, para que un `.env` de desarrollo no desvíe los casos de todos los clientes a una sola casilla. Pon tu correo para ver llegar los avisos de tus pruebas. Si falla el SMTP, el caso se registra igual |
 
 ### Con valor por defecto (cámbialas solo si sabes por qué)
 
@@ -320,6 +318,7 @@ suyo. `.env.example` es solo la plantilla: la app no lo lee, y si cambia no actu
 | `RAG_PRECARGAR` | `true` | Cargar el índice al arrancar la API (en segundo plano) y no en el primer mensaje |
 | `CHAT_MAX_VUELTAS` | `3` | Llamadas al modelo con herramientas por turno (más una para cerrar) |
 | `CHAT_MAX_MENSAJES` | `8` | Mensajes previos que se reenvían en cada turno: más memoria, más tokens |
+| `CHAT_MAX_CONVERSACIONES` | `200` | Conversaciones que se guardan en memoria a la vez; al pasar el tope se olvida la más antigua |
 | `CHAT_MAX_TOKENS`, `CHAT_TEMPERATURA` | `600`, `0.3` | Largo máximo y variabilidad de cada respuesta del modelo |
 | `CHUNK_MAX_PALABRAS`, `CHUNK_OVERLAP_PALABRAS` | `150`, `25` | Tamaño y solape de los fragmentos de prosa |
 
@@ -359,7 +358,7 @@ app/
   api/           # rutas del cliente autenticado (/mi) y banco de pruebas (/dev/rag)
   data/          # acceso a SQLite (solo lectura, filtrado por cliente)
   schemas/       # modelos Pydantic
-  llm/           # cliente del modelo de lenguaje (router del curso)
+  llm/           # cliente del modelo de lenguaje (router con respaldos)
   rag/           # RAG: lectura de PDF, filtro de modo A, índice y búsqueda
   static/        # página del banco de pruebas
   agente/        # prompt del sistema y turno del chat (RAG previo + herramientas)

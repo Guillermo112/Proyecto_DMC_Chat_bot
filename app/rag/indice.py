@@ -1,7 +1,5 @@
 """Índice en memoria: fragmentos → vectores → búsqueda con umbral y MMR.
 
-Adaptado de `rag_service.BuscadorDocumentos` (sesion7):
-
 - Motor denso: embeddings locales (`SENTENCE_TRANSFORMER_MODEL`, granite 97M).
   Si no está disponible y `RAG_MOTOR=auto`, cae a TF-IDF: peor calidad, pero
   funciona sin red. Los tests usan TF-IDF o un `embedder` simulado.
