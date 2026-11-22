@@ -7,7 +7,7 @@ chatbot (y, más adelante, las herramientas de LangChain en `app/tools`).
 
 | Regla | Cómo se cumple |
 |---|---|
-| Solo lectura | `get_connection()` abre `file:<ruta>?mode=ro` con `uri=True`. Cualquier `INSERT/UPDATE/DELETE` lanza `sqlite3.OperationalError`. |
+| Solo lectura por defecto | `get_connection()` abre `file:<ruta>?mode=ro` con `uri=True`. Cualquier `INSERT/UPDATE/DELETE` lanza `sqlite3.OperationalError`. Solo `app/auth` y el `_run` del CRUD (`anticipa_crud_por_entidad.py`) piden `escritura=True` (`mode=rw`). |
 | Consultas parametrizadas | Todo valor externo va como parámetro `?`. Los f-strings solo insertan fragmentos SQL fijos definidos en el código (lista de columnas, condiciones de filtro, marcadores `?`). |
 | Un cliente por consulta | Toda función recibe `cliente_id` y lo aplica en el `WHERE`. Las líneas de factura y los ajustes, que no tienen `id_cliente`, se filtran con un JOIN a `factura`. |
 | Entradas validadas | `cliente_id` debe ser `int` positivo; `estado` debe estar en la lista permitida; las fechas deben ser `datetime.date`. Si no, `ValueError`. |

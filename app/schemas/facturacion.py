@@ -88,3 +88,6 @@ class ResumenFacturacion(BaseModel):
     subtotal: float
     igv: float
     total: float
+
+
+

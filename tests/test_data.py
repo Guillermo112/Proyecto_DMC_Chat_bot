@@ -86,4 +86,4 @@ def test_resumen_excluye_anuladas_y_valida_rango():
 def test_health():
     resp = TestClient(app).get("/health")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "ok", "db": "ok"}
+    assert resp.json() == {"status": "OK", "db": "OK"}

@@ -222,3 +222,6 @@ __marimo__/
 # Base SQLite y salidas generadas por db/generar_datos.py (reproducibles)
 *.db
 db/casos_datos.json
+
+# Archivos temporales de Office
+~$*
