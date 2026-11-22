@@ -124,6 +124,10 @@ class RespuestaLLM:
     uso: dict[str, int] = field(default_factory=dict)
     latencia: float = 0.0
     crudo: Any = None
+    # True si el proveedor cortó la salida por max_tokens (finish_reason "length",
+    # stop_reason "max_tokens" o finishReason "MAX_TOKENS"). En los modelos que razonan,
+    # el razonamiento también cuenta para ese tope.
+    cortada: bool = False
 
     @property
     def ok(self) -> bool:
@@ -648,6 +652,7 @@ class Router:
             texto=texto, razonamiento=razonamiento, tool_calls=llamadas,
             endpoint=endpoint.nombre, modelo=datos.get("model") or modelo,
             modo=modo, familia="openai", uso=datos.get("usage") or {}, crudo=datos,
+            cortada=eleccion.get("finish_reason") == "length",
         )
         if json_schema:
             respuesta.datos = _json_extraer(texto)
@@ -720,7 +725,7 @@ class Router:
             tool_calls=llamadas, endpoint=endpoint.nombre,
             modelo=datos.get("model") or endpoint.modelo, modo=modo, familia="anthropic",
             uso={k: v for k, v in (datos.get("usage") or {}).items() if isinstance(v, int)},
-            crudo=datos,
+            crudo=datos, cortada=datos.get("stop_reason") == "max_tokens",
         )
         if json_schema:
             respuesta.datos = _json_extraer(texto)
@@ -791,7 +796,7 @@ class Router:
             modo=modo, familia="gemini",
             uso={"prompt_tokens": uso.get("promptTokenCount", 0),
                  "completion_tokens": uso.get("candidatesTokenCount", 0)},
-            crudo=datos,
+            crudo=datos, cortada=candidato.get("finishReason") == "MAX_TOKENS",
         )
         if json_schema:
             respuesta.datos = _json_extraer(texto)

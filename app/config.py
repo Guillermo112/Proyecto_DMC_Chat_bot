@@ -92,7 +92,10 @@ CHAT_MAX_VUELTAS = int(os.getenv("CHAT_MAX_VUELTAS", "3"))
 # Mensajes de la conversación que se reenvían en cada turno (memoria corta).
 CHAT_MAX_MENSAJES = int(os.getenv("CHAT_MAX_MENSAJES", "8"))
 CHAT_MAX_CONVERSACIONES = int(os.getenv("CHAT_MAX_CONVERSACIONES", "200"))
-CHAT_MAX_TOKENS = int(os.getenv("CHAT_MAX_TOKENS", "600"))
+# Tope de salida por llamada. En los modelos que razonan (deepseek-flash) el razonamiento
+# también cuenta: con 600 se cortaban respuestas a la mitad. Solo se cobra lo que se usa.
+# Si aun así se corta, el chat reintenta una vez con el doble (app/agente/chat.py).
+CHAT_MAX_TOKENS = int(os.getenv("CHAT_MAX_TOKENS", "1500"))
 CHAT_TEMPERATURA = float(os.getenv("CHAT_TEMPERATURA", "0.3"))
 # Cargar el índice del RAG al arrancar la API (en segundo plano), no en el primer mensaje.
 RAG_PRECARGAR = (os.getenv("RAG_PRECARGAR") or "true").strip().lower() in ("1", "true", "si", "sí", "yes")

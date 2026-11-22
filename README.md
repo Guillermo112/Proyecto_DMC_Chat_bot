@@ -319,7 +319,7 @@ suyo. `.env.example` es solo la plantilla: la app no lo lee, y si cambia no actu
 | `CHAT_MAX_VUELTAS` | `3` | Llamadas al modelo con herramientas por turno (más una para cerrar) |
 | `CHAT_MAX_MENSAJES` | `8` | Mensajes previos que se reenvían en cada turno: más memoria, más tokens |
 | `CHAT_MAX_CONVERSACIONES` | `200` | Conversaciones que se guardan en memoria a la vez; al pasar el tope se olvida la más antigua |
-| `CHAT_MAX_TOKENS`, `CHAT_TEMPERATURA` | `600`, `0.3` | Largo máximo y variabilidad de cada respuesta del modelo |
+| `CHAT_MAX_TOKENS`, `CHAT_TEMPERATURA` | `1500`, `0.3` | Largo máximo (incluye el razonamiento en los modelos que razonan; si se corta, se reintenta una vez con el doble) y variabilidad de cada respuesta del modelo |
 | `CHUNK_MAX_PALABRAS`, `CHUNK_OVERLAP_PALABRAS` | `150`, `25` | Tamaño y solape de los fragmentos de prosa |
 
 ---

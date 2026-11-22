@@ -39,6 +39,7 @@ IDEMPOTENTES = frozenset({"ver_perfil", "listar_facturas", "ver_factura", "ver_s
                           "consultar_solicitudes", "listar_casos"})
 MAX_RESULTADO = 12000   # caracteres de un resultado de herramienta enviados al modelo
 SIN_RESPUESTA = "No pude completar la respuesta. ¿Me lo repites con otras palabras?"
+CORTADA = "Se me cortó la respuesta. Si quieres, pídeme que continúe."
 
 # Para el saludo: qué se encontró al revisar la cuenta (anomalías sin caso abierto).
 ETIQUETAS_ANOMALIA = {
@@ -83,6 +84,17 @@ def _resumen(resultado: dict[str, Any]) -> str:
             return f"{clave}={resultado[clave]}"
     listas = [f"{k}={len(v)}" for k, v in resultado.items() if isinstance(v, list)]
     return ", ".join(listas[:3]) or "ok"
+
+
+def _texto_final(resp: Any) -> str:
+    """Texto para el cliente. Si llegó cortado aun tras el reintento, se recorta a la
+    última oración completa y se avisa, en vez de mostrar una frase a medias."""
+    texto = (resp.texto or "").strip()
+    if not getattr(resp, "cortada", False):
+        return texto or SIN_RESPUESTA
+    fin = max(texto.rfind(c) for c in (".", "?", "!", "\n"))
+    completo = texto[:fin + 1].strip() if fin >= len(texto) // 3 else ""
+    return f"{completo}\n\n{CORTADA}" if completo else SIN_RESPUESTA
 
 
 class ServicioChat:
@@ -216,9 +228,23 @@ class ServicioChat:
         return turno
 
     def _llamar(self, mensajes: list[dict[str, Any]], turno: Turno, con_herramientas: bool) -> Any:
+        """Una llamada al modelo. Si el proveedor corta la salida por `CHAT_MAX_TOKENS`
+        (en los modelos que razonan, el razonamiento también cuenta), se reintenta una
+        vez con el doble: una oración a medias o una herramienta con argumentos rotos es
+        peor que una llamada más."""
+        resp = self._una_llamada(mensajes, turno, con_herramientas, config.CHAT_MAX_TOKENS)
+        if resp.cortada:
+            log.warning("chat.respuesta_cortada max_tokens=%s: se reintenta con el doble",
+                        config.CHAT_MAX_TOKENS)
+            resp = self._una_llamada(mensajes, turno, con_herramientas, config.CHAT_MAX_TOKENS * 2)
+            if resp.cortada:
+                log.warning("chat.respuesta_cortada_de_nuevo max_tokens=%s", config.CHAT_MAX_TOKENS * 2)
+        return resp
+
+    def _una_llamada(self, mensajes: list[dict[str, Any]], turno: Turno, con_herramientas: bool,
+                     max_tokens: int) -> Any:
         resp = self.router().chat(mensajes, tools=ESQUEMAS if con_herramientas else None,
-                                  temperature=config.CHAT_TEMPERATURA,
-                                  max_tokens=config.CHAT_MAX_TOKENS)
+                                  temperature=config.CHAT_TEMPERATURA, max_tokens=max_tokens)
         turno.llamadas += 1
         turno.modelo = resp.modelo or turno.modelo
         uso = resp.uso or {}
@@ -233,7 +259,7 @@ class ServicioChat:
         for _ in range(config.CHAT_MAX_VUELTAS):
             resp = self._llamar(mensajes, turno, con_herramientas=True)
             if not resp.tool_calls:
-                return (resp.texto or "").strip() or SIN_RESPUESTA
+                return _texto_final(resp)
             mensajes.append({
                 "role": "assistant", "content": resp.texto or "",
                 "tool_calls": [{"id": tc["id"], "type": "function",
@@ -265,7 +291,7 @@ class ServicioChat:
                                  "content": contenido[:MAX_RESULTADO]})
         # Se acabaron las vueltas: una última llamada sin herramientas para cerrar.
         resp = self._llamar(mensajes, turno, con_herramientas=False)
-        return (resp.texto or "").strip() or SIN_RESPUESTA
+        return _texto_final(resp)
 
 
 _servicio: ServicioChat | None = None
