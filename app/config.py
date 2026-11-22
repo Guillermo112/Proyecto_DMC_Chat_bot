@@ -29,3 +29,17 @@ SMTP_REMITENTE = os.getenv("SMTP_REMITENTE", "") or SMTP_USER
 OTP_MINUTOS_VALIDEZ = int(os.getenv("OTP_MINUTOS_VALIDEZ", "10"))
 OTP_MAX_INTENTOS = int(os.getenv("OTP_MAX_INTENTOS", "3"))
 OTP_ESPERA_REENVIO_SEG = int(os.getenv("OTP_ESPERA_REENVIO_SEG", "60"))
+
+# Clave del HMAC del OTP y de la firma del JWT de sesión.
+# Vacío = no se pueden emitir códigos ni tokens (se valida al usarlo, no al importar).
+AUTH_SECRET = os.getenv("AUTH_SECRET", "")
+# Duración del token de sesión tras verificar el código. Sin logout.
+AUTH_MINUTOS_SESION = int(os.getenv("AUTH_MINUTOS_SESION", "30"))
+
+# Entorno: solo "dev" monta el CRUD de desarrollo /api/... (sin autenticación).
+# Sin definir = "prod": si falta en el .env, el CRUD queda oculto (seguro por defecto).
+ENTORNO = (os.getenv("ENTORNO") or "prod").strip().lower()  # vacío = sin definir
+
+# Límite de peticiones a /auth/solicitar-codigo por IP (ventana deslizante).
+AUTH_MAX_SOLICITUDES_POR_IP = int(os.getenv("AUTH_MAX_SOLICITUDES_POR_IP", "5"))
+AUTH_VENTANA_SOLICITUDES_SEG = int(os.getenv("AUTH_VENTANA_SOLICITUDES_SEG", "900"))

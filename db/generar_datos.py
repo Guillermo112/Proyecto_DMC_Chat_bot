@@ -15,11 +15,15 @@ en correos reales del equipo: CORREO_PRUEBA_1..5 (y opcional NOMBRE_PRUEBA_1..5)
 ../.env, repartidos en rotación (slot = (id_cliente - 1) % 5 + 1). Un slot vacío
 deja sus clientes con facturacion@clienteNN.example. Para ignorar el .env:
     python3 generar_datos.py --publico     # todos los correos terminan en .example
+Requiere AUTH_SECRET en ../.env: los códigos de prueba se guardan con el mismo HMAC que la app.
 """
-import sqlite3, random, json, hashlib, os, sys
+import sqlite3, random, json, os, sys
 from datetime import date, datetime, timedelta
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# Mismo hash que la app (HMAC con AUTH_SECRET del .env): se importa para no duplicarlo.
+sys.path.insert(0, os.path.dirname(HERE))
+from app.auth.otp import hash_codigo  # noqa: E402
 DB_PATH = os.path.join(HERE, "anticipa.db")
 SCHEMA = os.path.join(HERE, "schema.sql")
 JSON_OUT = os.path.join(HERE, "casos_datos.json")
@@ -480,7 +484,7 @@ def main():
                     (cli, caso, fecha, rol, msg))
     def add_verif(cli, ruc, envio, intentos, estado, code="123456"):
         exp = datetime.strptime(envio, "%Y-%m-%d %H:%M") + timedelta(minutes=10)
-        h = hashlib.sha256(code.encode()).hexdigest() if code else None
+        h = hash_codigo(code) if code else None
         cur.execute("INSERT INTO verificacion (id_cliente,ruc_ingresado,codigo_hash,fecha_envio,fecha_expira,intentos,estado) "
                     "VALUES (?,?,?,?,?,?,?)", (cli, ruc, h, envio, fmt_dt(exp), intentos, estado))
 

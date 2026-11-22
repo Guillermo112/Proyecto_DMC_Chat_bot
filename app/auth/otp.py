@@ -2,7 +2,8 @@
 
 Flujo: `solicitar_codigo(ruc)` -> (id de verificación, correo enmascarado);
 `verificar_codigo(id, codigo)` -> `cliente_id` verificado o None.
-En la base solo se guarda el hash SHA-256 del código (igual que los datos de prueba).
+En la base solo se guarda HMAC-SHA256(AUTH_SECRET, código): sin el secreto, un
+volcado de la tabla no permite recuperar los códigos probando el millón de opciones.
 """
 import hashlib
 import hmac
@@ -14,13 +15,19 @@ from email.message import EmailMessage
 from pathlib import Path
 
 from app import config
+from app.auth.secreto import obtener_secreto
 from app.data.conexion import get_connection
 
 _FORMATO = "%Y-%m-%d %H:%M:%S"
 
 
-def _hash(codigo: str) -> str:
-    return hashlib.sha256(codigo.encode()).hexdigest()
+def hash_codigo(codigo: str) -> str:
+    """HMAC-SHA256 del código con AUTH_SECRET (hex, 64 caracteres).
+
+    También lo usa db/generar_datos.py para los datos de prueba. Cambiar el secreto
+    invalida los códigos pendientes (dejan de coincidir).
+    """
+    return hmac.new(obtener_secreto(), codigo.encode(), hashlib.sha256).hexdigest()
 
 
 def enviar_correo(destino: str, asunto: str, cuerpo: str) -> None:
@@ -53,12 +60,22 @@ def solicitar_codigo(ruc: str, db_path: Path | None = None) -> tuple[int, str | 
 
     Devuelve (id de verificación, correo enmascarado). Si el RUC no existe no se
     envía nada: se registra el intento ('bloqueado') y el correo es None.
-    ValueError si el RUC es inválido o si se pide otro código antes de
-    OTP_ESPERA_REENVIO_SEG.
+
+    Reenvío antes de OTP_ESPERA_REENVIO_SEG: no se envía otro correo ni se genera
+    otro código. Se crea una fila que continúa la pendiente (mismo código, misma
+    expiración, mismos intentos y misma fecha de envío) y se devuelve su id; la
+    anterior queda 'expirado'. Así la respuesta no se distingue de la de un RUC
+    inexistente (siempre un id nuevo) y el código que ya llegó sigue sirviendo con
+    el id devuelto, sin regalar intentos extra.
+
+    ValueError si el RUC es inválido. RuntimeError si falta AUTH_SECRET.
     """
     ruc = ruc.strip() if isinstance(ruc, str) else ""
     if len(ruc) != 11 or not ruc.isdigit():
         raise ValueError("El RUC debe tener 11 dígitos")
+    # Se valida antes de mirar la base: sin secreto fallan igual los RUC existentes
+    # y los inexistentes (si no, el error revelaría cuáles existen).
+    obtener_secreto()
     ahora = datetime.now()
     with get_connection(db_path, escritura=True) as con:
         with con:  # una transacción: si el envío falla, no queda el registro
@@ -76,13 +93,25 @@ def solicitar_codigo(ruc: str, db_path: Path | None = None) -> tuple[int, str | 
 
             id_cliente = cliente["id_cliente"]
             ultimo = con.execute(
-                "SELECT fecha_envio FROM verificacion WHERE id_cliente = ? AND estado = 'pendiente'"
+                "SELECT id_verificacion, codigo_hash, fecha_envio, fecha_expira, intentos"
+                " FROM verificacion WHERE id_cliente = ? AND estado = 'pendiente'"
                 " ORDER BY id_verificacion DESC LIMIT 1",
                 (id_cliente,),
             ).fetchone()
             espera = timedelta(seconds=config.OTP_ESPERA_REENVIO_SEG)
             if ultimo and ahora - datetime.fromisoformat(ultimo["fecha_envio"]) < espera:
-                raise ValueError("Ya se envió un código hace poco; espera un momento antes de pedir otro")
+                # Reenvío prematuro: continuar la verificación pendiente sin enviar nada.
+                con.execute(
+                    "UPDATE verificacion SET estado = 'expirado' WHERE id_verificacion = ?",
+                    (ultimo["id_verificacion"],),
+                )
+                cur = con.execute(
+                    "INSERT INTO verificacion (id_cliente, ruc_ingresado, codigo_hash, fecha_envio,"
+                    " fecha_expira, intentos, estado) VALUES (?, ?, ?, ?, ?, ?, 'pendiente')",
+                    (id_cliente, ruc, ultimo["codigo_hash"], ultimo["fecha_envio"],
+                     ultimo["fecha_expira"], ultimo["intentos"]),
+                )
+                return cur.lastrowid, enmascarar(cliente["correo_facturacion"])
 
             # Un código nuevo invalida los anteriores.
             con.execute(
@@ -94,7 +123,7 @@ def solicitar_codigo(ruc: str, db_path: Path | None = None) -> tuple[int, str | 
             cur = con.execute(
                 "INSERT INTO verificacion (id_cliente, ruc_ingresado, codigo_hash, fecha_envio,"
                 " fecha_expira, intentos, estado) VALUES (?, ?, ?, ?, ?, 0, 'pendiente')",
-                (id_cliente, ruc, _hash(codigo), ahora.strftime(_FORMATO), expira.strftime(_FORMATO)),
+                (id_cliente, ruc, hash_codigo(codigo), ahora.strftime(_FORMATO), expira.strftime(_FORMATO)),
             )
             enviar_correo(
                 cliente["correo_facturacion"],
@@ -126,7 +155,7 @@ def verificar_codigo(id_verificacion: int, codigo: str, db_path: Path | None = N
                 return None
 
             intentos = fila["intentos"] + 1
-            if hmac.compare_digest(_hash(codigo), fila["codigo_hash"]):
+            if hmac.compare_digest(hash_codigo(codigo), fila["codigo_hash"]):
                 con.execute(
                     "UPDATE verificacion SET intentos = ?, estado = 'verificado' WHERE id_verificacion = ?",
                     (intentos, id_verificacion),

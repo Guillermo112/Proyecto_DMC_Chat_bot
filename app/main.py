@@ -13,18 +13,22 @@ Documentación interactiva:
     http://127.0.0.1:8000/docs
 
 IMPORTANTE:
-- API de desarrollo. Antes de exponerla fuera de localhost agrega autenticación,
-  autorización por rol, límites de uso y validación de propiedad del cliente.
+- Las rutas /api/... son CRUD de desarrollo, sin autenticación: solo se montan
+  con ENTORNO=dev (ver app/config.py). Con cualquier otro valor quedan /health,
+  /auth y /mi (API del cliente autenticado).
 - Los métodos que consultan vistas dependen de que esas vistas existan en SQLite
   y tengan las columnas utilizadas en el repositorio.
 """
 
+import logging
 from typing import Any
 
 from fastapi import FastAPI, APIRouter, HTTPException, Query, Path as PathParam
 from fastapi.responses import JSONResponse
 from sqlite3 import IntegrityError, OperationalError, DatabaseError
 
+from app import config
+from app.api.cliente import router as cliente_router
 from app.auth.rutas import router as auth_router
 from app.data import get_connection
 from app.data.anticipa_crud_por_entidad import (
@@ -51,6 +55,15 @@ app = FastAPI(
 )
 
 app.include_router(auth_router)
+# API del cliente autenticado (cliente_id solo desde el token). El resto de /api/...
+# es CRUD de desarrollo.
+app.include_router(cliente_router)
+
+log = logging.getLogger(__name__)
+
+# Todas las rutas /api/... cuelgan de este router; solo se monta con ENTORNO=dev
+# (al final del archivo). Nada de /api se registra directamente en `app`.
+dev = APIRouter()
 
 
 @app.get("/health", tags=["Sistema"])
@@ -166,7 +179,7 @@ def registrar_crud(
                 raise HTTPException(status_code=404, detail="Registro no encontrado")
             return {"desactivado": True, "estado": estado}
 
-    app.include_router(router)
+    dev.include_router(router)
 
 
 registrar_crud("/api/personal", "Personal", personal)
@@ -190,7 +203,7 @@ registrar_crud("/api/parametros", "Parámetros", parametro)
 # Filtros del listado. Endpoint separado para no mezclar con el GET general.
 # ---------------------------------------------------------------------------
 
-@app.post("/api/{entidad}/buscar", tags=["Búsquedas"])
+@dev.post("/api/{entidad}/buscar", tags=["Búsquedas"])
 def buscar_registros(
     entidad: str,
     filtros: dict[str, Any],
@@ -216,12 +229,12 @@ def buscar_registros(
 # Métodos adicionales de PersonalCRUD
 # ---------------------------------------------------------------------------
 
-@app.get("/api/personal/por-rol/{rol}", tags=["Personal - métodos adicionales"])
+@dev.get("/api/personal/por-rol/{rol}", tags=["Personal - métodos adicionales"])
 def personal_por_rol(rol: str):
     return ejecutar(personal.obtener_por_rol, rol)
 
 
-@app.get("/api/personal/por-correo/{correo}", tags=["Personal - métodos adicionales"])
+@dev.get("/api/personal/por-correo/{correo}", tags=["Personal - métodos adicionales"])
 def personal_por_correo(correo: str):
     result = ejecutar(personal.obtener_por_correo, correo)
     if result is None:
@@ -230,7 +243,7 @@ def personal_por_correo(correo: str):
 
 
 # ClienteCRUD
-@app.get("/api/clientes/por-ruc/{ruc}", tags=["Clientes - métodos adicionales"])
+@dev.get("/api/clientes/por-ruc/{ruc}", tags=["Clientes - métodos adicionales"])
 def cliente_por_ruc(ruc: str):
     result = ejecutar(cliente.obtener_por_ruc, ruc)
     if result is None:
@@ -238,7 +251,7 @@ def cliente_por_ruc(ruc: str):
     return result
 
 
-@app.get("/api/clientes/{cliente_id}/contacto-facturacion", tags=["Clientes - métodos adicionales"])
+@dev.get("/api/clientes/{cliente_id}/contacto-facturacion", tags=["Clientes - métodos adicionales"])
 def cliente_contacto(cliente_id: int):
     result = ejecutar(cliente.obtener_contacto_facturacion, cliente_id)
     if result is None:
@@ -246,7 +259,7 @@ def cliente_contacto(cliente_id: int):
     return result
 
 
-@app.get("/api/clientes/{cliente_id}/ejecutivo", tags=["Clientes - métodos adicionales"])
+@dev.get("/api/clientes/{cliente_id}/ejecutivo", tags=["Clientes - métodos adicionales"])
 def cliente_ejecutivo(cliente_id: int):
     result = ejecutar(cliente.obtener_ejecutivo, cliente_id)
     if result is None:
@@ -255,12 +268,12 @@ def cliente_ejecutivo(cliente_id: int):
 
 
 # ServicioContratadoCRUD
-@app.get("/api/clientes/{cliente_id}/servicios", tags=["Servicios - métodos adicionales"])
+@dev.get("/api/clientes/{cliente_id}/servicios", tags=["Servicios - métodos adicionales"])
 def servicios_cliente(cliente_id: int):
     return ejecutar(servicio.listar_servicios_cliente, cliente_id)
 
 
-@app.get("/api/servicios/{servicio_id}/tarifa-sla", tags=["Servicios - métodos adicionales"])
+@dev.get("/api/servicios/{servicio_id}/tarifa-sla", tags=["Servicios - métodos adicionales"])
 def servicio_tarifa_sla(servicio_id: int):
     result = ejecutar(servicio.obtener_tarifa_y_sla, servicio_id)
     if result is None:
@@ -268,55 +281,55 @@ def servicio_tarifa_sla(servicio_id: int):
     return result
 
 
-@app.get("/api/clientes/{cliente_id}/anomalias/servicios-baja-facturados", tags=["Detección de anomalías"])
+@dev.get("/api/clientes/{cliente_id}/anomalias/servicios-baja-facturados", tags=["Detección de anomalías"])
 def servicios_baja_facturados(cliente_id: int):
     return ejecutar(servicio.detectar_baja_facturada, cliente_id)
 
 
 # FacturaCRUD
-@app.get("/api/clientes/{cliente_id}/facturas/periodo/{periodo}", tags=["Facturas - métodos adicionales"])
+@dev.get("/api/clientes/{cliente_id}/facturas/periodo/{periodo}", tags=["Facturas - métodos adicionales"])
 def facturas_periodo(cliente_id: int, periodo: str):
     return ejecutar(factura.obtener_por_periodo, cliente_id, periodo)
 
 
-@app.get("/api/clientes/{cliente_id}/facturas/periodo/{periodo}/detalle", tags=["Facturas - métodos adicionales"])
+@dev.get("/api/clientes/{cliente_id}/facturas/periodo/{periodo}/detalle", tags=["Facturas - métodos adicionales"])
 def facturas_periodo_detalle(cliente_id: int, periodo: str):
     return ejecutar(factura.obtener_factura_con_lineas, cliente_id, periodo)
 
 
-@app.get("/api/clientes/{cliente_id}/saldo", tags=["Facturas - métodos adicionales"])
+@dev.get("/api/clientes/{cliente_id}/saldo", tags=["Facturas - métodos adicionales"])
 def saldo_cliente(cliente_id: int):
     return ejecutar(factura.consultar_saldo, cliente_id)
 
 
-@app.get("/api/clientes/{cliente_id}/facturas/duplicadas", tags=["Detección de anomalías"])
+@dev.get("/api/clientes/{cliente_id}/facturas/duplicadas", tags=["Detección de anomalías"])
 def facturas_duplicadas(cliente_id: int):
     return ejecutar(factura.detectar_duplicadas, cliente_id)
 
 
-@app.get("/api/clientes/{cliente_id}/facturacion/variaciones", tags=["Detección de anomalías"])
+@dev.get("/api/clientes/{cliente_id}/facturacion/variaciones", tags=["Detección de anomalías"])
 def variacion_facturacion(cliente_id: int):
     return ejecutar(factura.detectar_variacion_facturacion, cliente_id)
 
 
 # FacturaLineaCRUD
-@app.get("/api/facturas/{factura_id}/lineas", tags=["Facturas - métodos adicionales"])
+@dev.get("/api/facturas/{factura_id}/lineas", tags=["Facturas - métodos adicionales"])
 def lineas_factura(factura_id: int):
     return ejecutar(factura_linea.listar_por_factura, factura_id)
 
 
-@app.get("/api/clientes/{cliente_id}/anomalias/tarifas-distintas", tags=["Detección de anomalías"])
+@dev.get("/api/clientes/{cliente_id}/anomalias/tarifas-distintas", tags=["Detección de anomalías"])
 def tarifas_distintas(cliente_id: int):
     return ejecutar(factura_linea.detectar_tarifas_distintas, cliente_id)
 
 
-@app.get("/api/clientes/{cliente_id}/anomalias/excesos-sin-sustento", tags=["Detección de anomalías"])
+@dev.get("/api/clientes/{cliente_id}/anomalias/excesos-sin-sustento", tags=["Detección de anomalías"])
 def excesos_sin_sustento(cliente_id: int):
     return ejecutar(factura_linea.detectar_excesos_sin_sustento, cliente_id)
 
 
 # ConsumoCRUD
-@app.get("/api/servicios/{servicio_id}/consumo/{periodo}", tags=["Consumos - métodos adicionales"])
+@dev.get("/api/servicios/{servicio_id}/consumo/{periodo}", tags=["Consumos - métodos adicionales"])
 def consumo_servicio(servicio_id: int, periodo: str):
     result = ejecutar(consumo.obtener_consumo, servicio_id, periodo)
     if result is None:
@@ -325,28 +338,28 @@ def consumo_servicio(servicio_id: int, periodo: str):
 
 
 # AveriaCRUD
-@app.get("/api/clientes/{cliente_id}/averias", tags=["Averías - métodos adicionales"])
+@dev.get("/api/clientes/{cliente_id}/averias", tags=["Averías - métodos adicionales"])
 def averias_cliente(cliente_id: int):
     return ejecutar(averia.listar_averias_cliente, cliente_id)
 
 
-@app.get("/api/clientes/{cliente_id}/anomalias/averias-sin-compensar", tags=["Detección de anomalías"])
+@dev.get("/api/clientes/{cliente_id}/anomalias/averias-sin-compensar", tags=["Detección de anomalías"])
 def averias_sin_compensar(cliente_id: int):
     return ejecutar(averia.detectar_sin_compensar, cliente_id)
 
 
 # SolicitudCRUD
-@app.get("/api/clientes/{cliente_id}/solicitudes", tags=["Solicitudes - métodos adicionales"])
+@dev.get("/api/clientes/{cliente_id}/solicitudes", tags=["Solicitudes - métodos adicionales"])
 def solicitudes_cliente(cliente_id: int):
     return ejecutar(solicitud.listar_solicitudes_cliente, cliente_id)
 
 
-@app.get("/api/clientes/{cliente_id}/solicitudes/vencidas", tags=["Solicitudes - métodos adicionales"])
+@dev.get("/api/clientes/{cliente_id}/solicitudes/vencidas", tags=["Solicitudes - métodos adicionales"])
 def solicitudes_vencidas(cliente_id: int):
     return ejecutar(solicitud.detectar_vencidas, cliente_id)
 
 
-@app.patch("/api/solicitudes/{solicitud_id}/estado", tags=["Solicitudes - métodos adicionales"])
+@dev.patch("/api/solicitudes/{solicitud_id}/estado", tags=["Solicitudes - métodos adicionales"])
 def actualizar_estado_solicitud(solicitud_id: int, body: dict[str, str]):
     estado = body.get("estado")
     if not estado:
@@ -358,12 +371,12 @@ def actualizar_estado_solicitud(solicitud_id: int, body: dict[str, str]):
 
 
 # CasoCRUD
-@app.get("/api/clientes/{cliente_id}/casos", tags=["Casos - métodos adicionales"])
+@dev.get("/api/clientes/{cliente_id}/casos", tags=["Casos - métodos adicionales"])
 def casos_cliente(cliente_id: int):
     return ejecutar(caso.listar_casos_cliente, cliente_id)
 
 
-@app.patch("/api/casos/{caso_id}/derivar", tags=["Casos - métodos adicionales"])
+@dev.patch("/api/casos/{caso_id}/derivar", tags=["Casos - métodos adicionales"])
 def derivar_caso(caso_id: int, body: dict[str, int]):
     responsable_id = body.get("responsable_id")
     if responsable_id is None:
@@ -374,7 +387,7 @@ def derivar_caso(caso_id: int, body: dict[str, int]):
     return {"derivado": True, "responsable_id": responsable_id}
 
 
-@app.patch("/api/casos/{caso_id}/cerrar", tags=["Casos - métodos adicionales"])
+@dev.patch("/api/casos/{caso_id}/cerrar", tags=["Casos - métodos adicionales"])
 def cerrar_caso(caso_id: int, body: dict[str, Any] | None = None):
     sustento = (body or {}).get("sustento")
     ok = ejecutar(caso.cerrar_caso, caso_id, sustento)
@@ -384,17 +397,17 @@ def cerrar_caso(caso_id: int, body: dict[str, Any] | None = None):
 
 
 # AjusteCRUD
-@app.get("/api/casos/{caso_id}/ajustes", tags=["Ajustes - métodos adicionales"])
+@dev.get("/api/casos/{caso_id}/ajustes", tags=["Ajustes - métodos adicionales"])
 def ajustes_caso(caso_id: int):
     return ejecutar(ajuste.listar_por_caso, caso_id)
 
 
-@app.get("/api/clientes/{cliente_id}/gestos-comerciales/{periodo}", tags=["Ajustes - métodos adicionales"])
+@dev.get("/api/clientes/{cliente_id}/gestos-comerciales/{periodo}", tags=["Ajustes - métodos adicionales"])
 def validar_gesto(cliente_id: int, periodo: str):
     return ejecutar(ajuste.validar_gesto_mensual, cliente_id, periodo)
 
 
-@app.patch("/api/ajustes/{ajuste_id}/aprobar", tags=["Ajustes - métodos adicionales"])
+@dev.patch("/api/ajustes/{ajuste_id}/aprobar", tags=["Ajustes - métodos adicionales"])
 def aprobar_ajuste(ajuste_id: int, body: dict[str, int]):
     aprobador_id = body.get("aprobador_id")
     if aprobador_id is None:
@@ -405,7 +418,7 @@ def aprobar_ajuste(ajuste_id: int, body: dict[str, int]):
     return {"aprobado": True}
 
 
-@app.patch("/api/ajustes/{ajuste_id}/rechazar", tags=["Ajustes - métodos adicionales"])
+@dev.patch("/api/ajustes/{ajuste_id}/rechazar", tags=["Ajustes - métodos adicionales"])
 def rechazar_ajuste(ajuste_id: int, body: dict[str, int]):
     aprobador_id = body.get("aprobador_id")
     if aprobador_id is None:
@@ -416,7 +429,7 @@ def rechazar_ajuste(ajuste_id: int, body: dict[str, int]):
     return {"rechazado": True}
 
 
-@app.patch("/api/ajustes/{ajuste_id}/aplicar", tags=["Ajustes - métodos adicionales"])
+@dev.patch("/api/ajustes/{ajuste_id}/aplicar", tags=["Ajustes - métodos adicionales"])
 def aplicar_ajuste(ajuste_id: int, body: dict[str, str]):
     fecha = body.get("fecha_aplicacion")
     if not fecha:
@@ -428,18 +441,18 @@ def aplicar_ajuste(ajuste_id: int, body: dict[str, str]):
 
 
 # InteraccionLogCRUD
-@app.get("/api/clientes/{cliente_id}/historial", tags=["Interacciones - métodos adicionales"])
+@dev.get("/api/clientes/{cliente_id}/historial", tags=["Interacciones - métodos adicionales"])
 def historial_cliente(cliente_id: int, limite: int = Query(50, ge=1, le=500)):
     return ejecutar(interaccion_log.obtener_historial_cliente, cliente_id, limite)
 
 
-@app.get("/api/casos/{caso_id}/interacciones", tags=["Interacciones - métodos adicionales"])
+@dev.get("/api/casos/{caso_id}/interacciones", tags=["Interacciones - métodos adicionales"])
 def interacciones_caso(caso_id: int):
     return ejecutar(interaccion_log.listar_por_caso, caso_id)
 
 
 # PoliticaTramoCRUD
-@app.get("/api/politicas-tramo/calcular/{monto}", tags=["Políticas - métodos adicionales"])
+@dev.get("/api/politicas-tramo/calcular/{monto}", tags=["Políticas - métodos adicionales"])
 def obtener_tramo(monto: float = PathParam(..., ge=0)):
     result = ejecutar(politica_tramo.obtener_tramo_por_monto, monto)
     if result is None:
@@ -448,14 +461,22 @@ def obtener_tramo(monto: float = PathParam(..., ge=0)):
 
 
 # ParametroCRUD
-@app.get("/api/parametros/{clave}/valor", tags=["Parámetros - métodos adicionales"])
+@dev.get("/api/parametros/{clave}/valor", tags=["Parámetros - métodos adicionales"])
 def obtener_parametro(clave: str, default: str | None = None):
     return {"clave": clave, "valor": ejecutar(parametro.obtener_valor, clave, default)}
 
 
-@app.get("/api/parametros/fecha-sistema/actual", tags=["Parámetros - métodos adicionales"])
+@dev.get("/api/parametros/fecha-sistema/actual", tags=["Parámetros - métodos adicionales"])
 def fecha_sistema():
     return {"fecha_actual": ejecutar(parametro.obtener_fecha_sistema)}
+
+
+# CRUD de desarrollo: solo con ENTORNO=dev.
+if config.ENTORNO == "dev":
+    app.include_router(dev)
+    log.warning("ENTORNO=dev: CRUD /api/... montado SIN autenticación; no exponer fuera de localhost.")
+else:
+    log.info("ENTORNO=%s: CRUD /api/... deshabilitado.", config.ENTORNO)
 
 
 # Evita respuestas HTML ante excepciones no controladas.

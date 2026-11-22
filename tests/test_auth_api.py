@@ -34,7 +34,12 @@ def test_flujo_completo(cliente):
     id_v = r.json()["id_verificacion"]
     r = api.post("/auth/verificar-codigo", json={"id_verificacion": id_v, "codigo": _codigo(enviados)})
     assert r.status_code == 200
-    assert r.json() == {"verificado": True, "cliente_id": 1}
+    datos = r.json()
+    assert datos["verificado"] is True and datos["cliente_id"] == 1
+    assert datos["token_type"] == "bearer" and datos["expira_en"] == config.AUTH_MINUTOS_SESION * 60
+    # El token identifica al cliente verificado en las peticiones siguientes.
+    r = api.get("/auth/sesion", headers={"Authorization": f"Bearer {datos['access_token']}"})
+    assert r.status_code == 200 and r.json() == {"cliente_id": 1}
 
 
 def test_codigo_incorrecto_es_401(cliente):
@@ -59,10 +64,38 @@ def test_ruc_mal_formado_es_422(cliente):
     assert api.post("/auth/solicitar-codigo", json={"ruc": "123"}).status_code == 422
 
 
-def test_reenvio_prematuro_es_429(cliente):
-    api, _, ruc, _ = cliente
-    assert api.post("/auth/solicitar-codigo", json={"ruc": ruc}).status_code == 200
-    assert api.post("/auth/solicitar-codigo", json={"ruc": ruc}).status_code == 429
+def test_reenvio_no_revela_si_el_ruc_existe(cliente):
+    """Pedir dos veces seguidas responde igual para un RUC de cliente y uno inexistente."""
+    api, enviados, ruc, _ = cliente
+
+    def dos_veces(r):
+        return [api.post("/auth/solicitar-codigo", json={"ruc": r}) for _ in range(2)]
+
+    existente, inexistente = dos_veces(ruc), dos_veces("99999999999")
+    for a, b in zip(existente, inexistente):
+        assert a.status_code == b.status_code == 200
+        assert a.json().keys() == b.json().keys()
+        assert a.json()["mensaje"] == b.json()["mensaje"]
+    # Siempre un id nuevo, en ambos casos.
+    assert existente[0].json()["id_verificacion"] != existente[1].json()["id_verificacion"]
+    assert inexistente[0].json()["id_verificacion"] != inexistente[1].json()["id_verificacion"]
+    assert len(enviados) == 1  # solo el primer pedido del RUC existente envía correo
+
+
+def test_reenvio_prematuro_el_codigo_recibido_sirve_con_el_ultimo_id(cliente):
+    api, enviados, ruc, _ = cliente
+    api.post("/auth/solicitar-codigo", json={"ruc": ruc})
+    ultimo = api.post("/auth/solicitar-codigo", json={"ruc": ruc}).json()["id_verificacion"]
+    r = api.post("/auth/verificar-codigo", json={"id_verificacion": ultimo, "codigo": _codigo(enviados)})
+    assert r.status_code == 200 and r.json()["cliente_id"] == 1
+
+
+def test_sin_secreto_ruc_existente_e_inexistente_responden_igual(cliente, monkeypatch):
+    api, enviados, ruc, _ = cliente
+    monkeypatch.setattr(config, "AUTH_SECRET", "")
+    a = api.post("/auth/solicitar-codigo", json={"ruc": ruc})
+    b = api.post("/auth/solicitar-codigo", json={"ruc": "99999999999"})
+    assert a.status_code == b.status_code == 503 and a.json() == b.json()
 
 
 def test_fallo_de_correo_es_503(cliente, monkeypatch):
@@ -90,3 +123,11 @@ def test_crud_de_verificaciones_no_expuesto(cliente, metodo, ruta):
     api, *_ = cliente
     r = getattr(api, metodo)(ruta, **({"json": {}} if metodo in ("put", "post") else {}))
     assert r.status_code in (404, 405)
+
+
+def test_verificar_sin_secreto_es_503(cliente, monkeypatch):
+    api, enviados, ruc, _ = cliente
+    id_v = api.post("/auth/solicitar-codigo", json={"ruc": ruc}).json()["id_verificacion"]
+    monkeypatch.setattr(config, "AUTH_SECRET", "")
+    r = api.post("/auth/verificar-codigo", json={"id_verificacion": id_v, "codigo": _codigo(enviados)})
+    assert r.status_code == 503

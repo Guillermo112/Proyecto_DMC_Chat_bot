@@ -8,7 +8,8 @@ LangChain usando las funciones de `app/data` como herramientas.
 
 ```
 app/
-  main.py      # FastAPI: /health, /auth y CRUD de desarrollo (/api/...)
+  main.py      # FastAPI: /health, /auth, /mi y CRUD de desarrollo (/api/...)
+  api/         # rutas del cliente autenticado (/mi/...)
   config.py    # settings desde variables de entorno
   data/        # acceso a SQLite (solo lectura, filtrado por cliente)
   schemas/     # modelos Pydantic
@@ -29,7 +30,8 @@ pip install -r requirements.txt
 ## Generar la base de datos
 
 `anticipa.db` no se versiona (está en `.gitignore`): se genera de forma
-reproducible desde `db/schema.sql` con datos fijos.
+reproducible desde `db/schema.sql` con datos fijos. Antes define `AUTH_SECRET`
+en `.env` (ver `.env.example`): los códigos OTP de prueba se guardan con ese HMAC.
 
 ```bash
 python -X utf8 db/generar_datos.py
@@ -56,6 +58,11 @@ Si una variable también está definida en el sistema, gana la del sistema.
 | `ANTICIPA_DB_PATH` | `db/anticipa.db` | Ruta de la base (relativa a la raíz o absoluta) |
 | `LIMITE_POR_DEFECTO` | `20` | Tamaño de página de `listar_facturas` |
 | `LIMITE_MAXIMO` | `100` | Tope de página; valores mayores se recortan |
+| `ENTORNO` | `prod` | `dev` monta el CRUD `/api/...` sin autenticación; otro valor o vacío lo oculta |
+| `AUTH_SECRET` | — | Clave del HMAC del OTP y de la firma del token (mínimo 32 caracteres) |
+| `AUTH_MINUTOS_SESION` | `30` | Duración del token de sesión |
+| `AUTH_MAX_SOLICITUDES_POR_IP` | `5` | Solicitudes de código por IP en la ventana |
+| `AUTH_VENTANA_SOLICITUDES_SEG` | `900` | Ventana del límite por IP (segundos) |
 
 ## Ejecutar
 
@@ -75,22 +82,54 @@ pytest -q
 registrado del cliente (vence en 10 min, se espera 60 s entre envíos) y
 devuelve `(id_verificacion, correo_enmascarado)`; `verificar_codigo(id, codigo)`
 devuelve el `cliente_id` o `None` (3 intentos fallidos = bloqueado). Solo se
-guarda el hash del código en `verificacion`.
+guarda HMAC-SHA256(`AUTH_SECRET`, código) en `verificacion`; sin `AUTH_SECRET`
+(mínimo 32 caracteres) no se envían códigos (503). Cambiarlo invalida los pendientes.
 
 Por HTTP (`app/auth/rutas.py`):
 
 - `POST /auth/solicitar-codigo` `{"ruc": "..."}` → `{"id_verificacion", "mensaje"}`.
-  La respuesta es la misma exista o no el RUC. 422 si el RUC no tiene 11 dígitos,
-  429 si se pide otro código antes de tiempo, 503 si falla el correo.
+  La respuesta es la misma (200, id nuevo, mismo mensaje) exista o no el RUC,
+  también al pedir otro código antes de `OTP_ESPERA_REENVIO_SEG`: en ese caso no se
+  envía correo y el código que ya llegó sirve con el **último** id devuelto (hereda
+  intentos y expiración). 422 si el RUC no tiene 11 dígitos, 429 si la IP superó
+  `AUTH_MAX_SOLICITUDES_POR_IP` solicitudes (5) en `AUTH_VENTANA_SOLICITUDES_SEG`
+  segundos (900), con cabecera `Retry-After`; 503 si falla el correo. El límite
+  por IP vive en memoria: con varios workers de uvicorn cada uno cuenta por su lado.
 - `POST /auth/verificar-codigo` `{"id_verificacion", "codigo"}` →
-  `{"verificado": true, "cliente_id"}` o 401.
+  `{"verificado": true, "cliente_id", "access_token", "token_type": "bearer", "expira_en"}`
+  o 401. `access_token` es un JWT (HS256, firmado con `AUTH_SECRET`) que vence en
+  `AUTH_MINUTOS_SESION` minutos (30 por defecto). No hay logout: un token no se puede
+  anular antes de vencer, salvo cambiando `AUTH_SECRET` (cierra todas las sesiones).
+- `GET /auth/sesion` con `Authorization: Bearer <access_token>` → `{"cliente_id"}`,
+  o 401 si falta, es inválido o expiró.
+
+En el código, las rutas con datos de cliente toman el cliente de la sesión con
+`cliente_id: int = Depends(cliente_actual)` (`app/auth/sesion.py`), nunca de lo que
+escriba el usuario.
+
+### API del cliente autenticado (`/mi/...`)
+
+Todas exigen `Authorization: Bearer <access_token>` (401 si falta o venció). El
+cliente sale **solo** del token: ninguna ruta recibe `cliente_id`, así que no se
+pueden pedir datos de otro cliente (`app/api/cliente.py`, sobre `app/data/facturacion.py`).
+
+| Ruta | Devuelve |
+|---|---|
+| `GET /mi/perfil` | Datos del cliente y su ejecutivo |
+| `GET /mi/facturas?fecha_desde&fecha_hasta&estado&limite&offset` | Facturas propias paginadas |
+| `GET /mi/facturas/{numero}` | Cabecera y líneas; 404 si no existe **o es de otro cliente** |
+| `GET /mi/saldo` | Saldo pendiente y notas de crédito aplicadas |
+| `GET /mi/resumen?fecha_desde&fecha_hasta` | Totales por periodo (excluye anuladas) |
+
+Las rutas `/api/...` son el CRUD de desarrollo para Postman: no usan token y
+**solo se montan con `ENTORNO=dev`**. Con cualquier otro valor, o sin definirlo,
+quedan únicamente `/health`, `/auth` y `/mi`.
 
 La tabla `verificacion` no está en el CRUD de `/api/...`: solo se toca vía `/auth`.
-Aún no se emite token de sesión tras verificar.
 
 Prueba en vivo:
 
-1. En `.env`: `SMTP_*` (con Gmail, una
+1. En `.env`: `AUTH_SECRET`, `SMTP_*` (con Gmail, una
    [contraseña de aplicación](https://myaccount.google.com/apppasswords)) y tu correo
    en tu slot `CORREO_PRUEBA_1`..`CORREO_PRUEBA_5`. Clientes por slot: 1 → 1, 6, 11;
    2 → 2, 7, 12; 3 → 3, 8, 13; 4 → 4, 9; 5 → 5, 10.

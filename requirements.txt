@@ -1,6 +1,19 @@
-fastapi>=0.110
-uvicorn>=0.29
-pydantic>=2.6
-python-dotenv>=1.0
-pytest>=8.0
-httpx>=0.27
+# Versiones probadas con Python 3.12 (pytest -q en verde).
+# Regla: piso = versión probada; tope = siguiente versión mayor
+# (en paquetes 0.x, la siguiente menor, porque ahí pueden romper compatibilidad).
+# Así una instalación nueva no trae cambios incompatibles por sorpresa.
+# Para actualizar: subir el tope, reinstalar y correr pytest -q.
+
+# App
+fastapi>=0.163,<0.164
+# FastAPI no le pone tope a Starlette. Starlette 1.10 ya avisa que TestClient
+# dejará de usar httpx: se acota hasta decidir la migración.
+starlette>=1.10,<1.11
+uvicorn>=0.54,<0.55
+pydantic>=2.14,<3
+python-dotenv>=1.2,<2
+PyJWT>=2.15,<3
+
+# Tests (httpx lo usa TestClient)
+pytest>=9.2,<10
+httpx>=0.28,<0.29
