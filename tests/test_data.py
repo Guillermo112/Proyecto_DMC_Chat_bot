@@ -98,10 +98,37 @@ def test_saldo_cliente_9_tiene_vencida():
     assert "F001-000212" in {f.numero for f in s.facturas}
 
 
-def test_saldo_cliente_1_incluye_duplicada():
+def test_saldo_cliente_1_con_duplicado_no_suma_ni_elige():
+    """CS-01: lista las dos facturas, pero no da un saldo que las sume (capa_datos.md §4)."""
     s = saldo_pendiente(1)
     assert {"F001-000254", "F001-000255"} <= {f.numero for f in s.facturas}
-    assert s.saldo_total == pytest.approx(2 * 218300.0)
+    assert s.periodos_multiples == ["2026-11"]
+    assert s.saldo_total is None
+    # Los duplicados vencen el 2026-12-21 (corte 2026-12-05): el saldo vencido no depende de ellos.
+    assert s.saldo_vencido == 0.0
+
+
+def test_saldo_sin_duplicados_no_cambia():
+    s = saldo_pendiente(9)
+    assert s.periodos_multiples == []
+    assert s.saldo_total == pytest.approx(sum(f.total for f in s.facturas))
+
+
+def test_resumen_con_duplicado_no_suma_el_periodo():
+    r = resumen_facturacion(1, date(2026, 10, 1), date(2026, 12, 31))  # periodos 2026-09 a 2026-11
+    por_periodo = {p.periodo: p for p in r.periodos}
+    nov = por_periodo["2026-11"]
+    assert nov.cantidad_facturas == 2 and nov.facturas_multiples is True
+    assert nov.subtotal is None and nov.igv is None and nov.total is None
+    assert por_periodo["2026-10"].facturas_multiples is False and por_periodo["2026-10"].subtotal == 185000.0
+    assert r.periodos_multiples == ["2026-11"]
+    assert r.subtotal is None and r.igv is None and r.total is None
+    assert r.cantidad_facturas == 4  # el conteo sí es seguro
+
+
+def test_resumen_sin_duplicado_en_el_rango_suma_normal():
+    r = resumen_facturacion(1, date(2026, 10, 1), date(2026, 11, 30))  # periodos 2026-09 y 2026-10
+    assert r.periodos_multiples == [] and r.total == pytest.approx(2 * 218300.0)
 
 
 def test_saldo_informa_nota_credito_sin_restarla():

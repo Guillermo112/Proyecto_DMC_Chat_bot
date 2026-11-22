@@ -74,7 +74,14 @@ Lo que el cliente tiene por pagar.
   fecha real del sistema.
 - **Notas de crédito:** se listan en `notas_credito_aplicadas` pero **no se
   restan**, porque la base no las refleja en la factura (decisión de diseño).
-- **Uso en el agente:** CS-11 (saldo y factura vencida).
+- **Facturas múltiples (sección 4):** si una suma incluiría una factura de un
+  periodo con más de una vigente, esa suma es `None` y el periodo va en
+  `periodos_multiples`. Se decide por suma: en el cliente 1, `saldo_total`
+  es `None` (incluye el duplicado de 2026-11), pero `saldo_vencido` es 0
+  porque los duplicados aún no vencen. Las facturas se listan igual, con su
+  estado, importe y vencimiento, que es lo que CS-11 pide informar.
+- **Uso en el agente:** CS-11 (saldo y factura vencida). Con `saldo_total`
+  en `None`, informar factura por factura y no dar un saldo total.
 
 ### `resumen_facturacion(cliente_id, fecha_desde, fecha_hasta) -> ResumenFacturacion`
 
@@ -83,12 +90,15 @@ inclusive). Excluye facturas anuladas.
 
 - **Tablas:** `factura`.
 - **Devuelve:** lista `periodos` (`periodo`, `cantidad_facturas`,
-  `subtotal`, `igv`, `total`) y los totales del rango.
+  `facturas_multiples`, `subtotal`, `igv`, `total`), los totales del rango y
+  `periodos_multiples`.
+- **Facturas múltiples (sección 4):** el periodo marcado lleva sus importes en
+  `None` y, si hay alguno en el rango, también los totales del rango.
+  `cantidad_facturas` sí se informa. Se cuentan todas las vigentes del
+  periodo, aunque alguna se haya emitido fuera del rango.
 - **Errores:** `ValueError` si falta una fecha o `fecha_desde > fecha_hasta`.
 - **Uso en el agente:** ver la evolución de varios meses. Para explicar una
   subida concreta (CS-09) usar `comparar_periodos`.
-- **Ojo:** un periodo con duplicado se suma (`cantidad_facturas = 2`); todavía
-  no cumple la regla de la sección 4.
 
 ### `comparar_periodos(cliente_id, periodo_b, periodo_a=None) -> ComparacionPeriodos`
 
@@ -121,7 +131,7 @@ usa el mes anterior a `periodo_b`. Excluye facturas anuladas.
 
 | Casuística | Función principal | Comentario |
 |---|---|---|
-| CS-01 Factura duplicada | `listar_facturas`, `detalle_factura` | El saldo del cliente 1 suma ambas facturas. La detección está en `v_facturas_duplicadas` (aún sin función). |
+| CS-01 Factura duplicada | `listar_facturas`, `detalle_factura` | Saldo, resumen y comparación marcan el periodo en `periodos_multiples` / `facturas_multiples` sin sumar. La detección con igual importe está en `v_facturas_duplicadas` (aún sin función). |
 | CS-02 a CS-05, CS-07 | `detalle_factura` | El cálculo de ajustes usa las vistas de detección; pendiente. |
 | CS-06 Solicitud fuera de plazo | — | Pendiente (`solicitud`, `v_solicitudes_vencidas`). |
 | CS-08 Gesto comercial | — | Pendiente (`v_gestos_mes_actual`). |
@@ -138,10 +148,10 @@ usa el mes anterior a `periodo_b`. Excluye facturas anuladas.
   sumarlas ni elegir una**; devolver un aviso con los números e importes y
   dejar sin calcular lo que dependa del total. Sumarlas presentaría el
   duplicado como una subida explicable (CS-09) y daría por válidas las dos
-  facturas, que es lo que CS-01 prohíbe afirmar. Detalle en
-  `PENDIENTES_datos.md` (comparación entre periodos y saldo).
-  *Excepción conocida:* `saldo_pendiente` y `resumen_facturacion` todavía
-  suman; ver la sección 2 de `PENDIENTES_datos.md`.
+  facturas, que es lo que CS-01 prohíbe afirmar. La cumplen
+  `comparar_periodos`, `saldo_pendiente` y `resumen_facturacion`, con la misma
+  detección (`_facturas_vigentes` en `facturacion.py`): los importes que
+  dependerían del duplicado van en `None`, nunca en 0.
 - No hay tabla de pagos: el saldo se deduce del `estado` de la factura.
 - Montos en `REAL`: se redondean a 2 decimales en los totales.
 - Los comentarios CS-xx de `schema.sql` usan una numeración distinta a la de

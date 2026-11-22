@@ -63,31 +63,41 @@ class SaldoPendiente(BaseModel):
 
     La base no tiene tabla de pagos y las notas de crédito aplicadas no
     modifican la factura, por eso se informan aparte y no se restan.
+
+    Si una suma incluiría una factura de un periodo con más de una vigente
+    (duplicado de CS-01), esa suma es None y el periodo va en
+    `periodos_multiples`: no se suman ni se elige una (docs/capa_datos.md §4).
+    Las facturas se listan igual, con su estado, importe y vencimiento.
     """
     fecha_corte: str
-    saldo_total: float
-    saldo_vencido: float
+    saldo_total: float | None
+    saldo_vencido: float | None
     cantidad_facturas: int
     facturas: list[FacturaResumen]
     notas_credito_aplicadas: list[NotaCreditoAplicada]
+    periodos_multiples: list[str]
 
 
 class ResumenPeriodo(BaseModel):
+    """Totales de un periodo; None si tiene más de una factura vigente."""
     periodo: str
     cantidad_facturas: int
-    subtotal: float
-    igv: float
-    total: float
+    facturas_multiples: bool
+    subtotal: float | None
+    igv: float | None
+    total: float | None
 
 
 class ResumenFacturacion(BaseModel):
+    """Totales del rango; None si algún periodo tiene más de una factura vigente."""
     fecha_desde: str
     fecha_hasta: str
     periodos: list[ResumenPeriodo]
     cantidad_facturas: int
-    subtotal: float
-    igv: float
-    total: float
+    subtotal: float | None
+    igv: float | None
+    total: float | None
+    periodos_multiples: list[str]
 
 
 

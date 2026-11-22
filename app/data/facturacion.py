@@ -71,6 +71,37 @@ def _factura(fila) -> FacturaResumen:
     return FacturaResumen(**{k: fila[k] for k in FacturaResumen.model_fields})
 
 
+def _facturas_vigentes(con, cliente_id: int, periodos) -> dict[str, list[FacturaResumen]]:
+    """Facturas no anuladas del cliente en esos periodos, agrupadas por periodo.
+
+    Un periodo con más de una es un posible duplicado (CS-01): quien llame no
+    debe sumarlas ni elegir una (regla en docs/capa_datos.md, sección 4).
+    """
+    periodos = list(dict.fromkeys(periodos))  # sin repetidos, en orden
+    if not periodos:
+        return {}
+    marcadores = ", ".join("?" for _ in periodos)  # solo marcadores fijos
+    filas = con.execute(
+        f"SELECT {_COLUMNAS_FACTURA} FROM factura f "
+        f"WHERE f.id_cliente = ? AND f.estado <> 'anulada' AND f.periodo IN ({marcadores}) "
+        "ORDER BY f.periodo, f.id_factura",
+        [cliente_id, *periodos],
+    ).fetchall()
+    resultado: dict[str, list[FacturaResumen]] = {p: [] for p in periodos}
+    for fila in filas:
+        resultado[fila["periodo"]].append(_factura(fila))
+    return resultado
+
+
+def _periodos_multiples(con, cliente_id: int, periodos) -> list[str]:
+    """Periodos (de los dados) con más de una factura vigente, ordenados."""
+    return sorted(p for p, fs in _facturas_vigentes(con, cliente_id, periodos).items() if len(fs) > 1)
+
+
+def _suma(valores) -> float:
+    return round(sum(valores), 2)
+
+
 def obtener_cliente(cliente_id: int, db_path: Path | None = None) -> Cliente | None:
     _validar_cliente_id(cliente_id)
     sql = """
@@ -167,7 +198,8 @@ def saldo_pendiente(cliente_id: int, db_path: Path | None = None) -> SaldoPendie
     """Suma de facturas emitidas, vencidas o en disputa del cliente.
 
     No resta notas de crédito (la base no las refleja en la factura); se
-    listan aparte las aplicadas sobre esas facturas.
+    listan aparte las aplicadas sobre esas facturas. Una suma que incluiría
+    una factura de un periodo con varias vigentes es None (ver SaldoPendiente).
     """
     _validar_cliente_id(cliente_id)
     marcadores = ",".join("?" for _ in ESTADOS_PENDIENTES)
@@ -190,16 +222,24 @@ def saldo_pendiente(cliente_id: int, db_path: Path | None = None) -> SaldoPendie
             """,
             (cliente_id, *ESTADOS_PENDIENTES),
         ).fetchall()
+        facturas = [_factura(f) for f in filas]
+        # Cuenta todas las vigentes del periodo (también pagadas), no solo las pendientes.
+        multiples = _periodos_multiples(con, cliente_id, [f.periodo for f in facturas])
 
-    facturas = [_factura(f) for f in filas]
+    def suma_si_es_segura(grupo: list[FacturaResumen]) -> float | None:
+        if any(f.periodo in multiples for f in grupo):
+            return None
+        return _suma(f.total for f in grupo)
+
     vencidas = [f for f in facturas if f.estado == "vencida" or f.fecha_vencimiento < fecha_corte]
     return SaldoPendiente(
         fecha_corte=fecha_corte,
-        saldo_total=round(sum(f.total for f in facturas), 2),
-        saldo_vencido=round(sum(f.total for f in vencidas), 2),
+        saldo_total=suma_si_es_segura(facturas),
+        saldo_vencido=suma_si_es_segura(vencidas),
         cantidad_facturas=len(facturas),
         facturas=facturas,
         notas_credito_aplicadas=[NotaCreditoAplicada(**dict(n)) for n in notas],
+        periodos_multiples=multiples,
     )
 
 
@@ -229,16 +269,27 @@ def resumen_facturacion(
             """,
             (cliente_id, desde, hasta),
         ).fetchall()
+        # Cuenta todas las vigentes del periodo, aunque alguna se emitiera fuera del rango.
+        multiples = _periodos_multiples(con, cliente_id, [f["periodo"] for f in filas])
 
-    periodos = [ResumenPeriodo(**dict(f)) for f in filas]
+    periodos = []
+    for f in filas:
+        es_multiple = f["periodo"] in multiples
+        periodos.append(ResumenPeriodo(
+            periodo=f["periodo"],
+            cantidad_facturas=f["cantidad_facturas"],
+            facturas_multiples=es_multiple,
+            **{k: None if es_multiple else f[k] for k in ("subtotal", "igv", "total")},
+        ))
+    hay_multiples = bool(multiples)
     return ResumenFacturacion(
         fecha_desde=desde,
         fecha_hasta=hasta,
         periodos=periodos,
         cantidad_facturas=sum(p.cantidad_facturas for p in periodos),
-        subtotal=round(sum(p.subtotal for p in periodos), 2),
-        igv=round(sum(p.igv for p in periodos), 2),
-        total=round(sum(p.total for p in periodos), 2),
+        **{k: None if hay_multiples else _suma(getattr(p, k) for p in periodos)
+           for k in ("subtotal", "igv", "total")},
+        periodos_multiples=multiples,
     )
 
 
@@ -247,25 +298,6 @@ def resumen_facturacion(
 def _periodo_anterior(periodo: str) -> str:
     anio, mes = int(periodo[:4]), int(periodo[5:])
     return f"{anio - 1}-12" if mes == 1 else f"{anio}-{mes - 1:02d}"
-
-
-def _facturas_vigentes(con, cliente_id: int, periodos: list[str]) -> dict[str, list[FacturaResumen]]:
-    """Facturas no anuladas del cliente, agrupadas por periodo.
-
-    Un periodo con más de una es un posible duplicado (CS-01): quien llame no
-    debe sumarlas ni elegir una (regla en docs/capa_datos.md, sección 4).
-    """
-    marcadores = ", ".join("?" for _ in periodos)  # solo marcadores fijos
-    filas = con.execute(
-        f"SELECT {_COLUMNAS_FACTURA} FROM factura f "
-        f"WHERE f.id_cliente = ? AND f.estado <> 'anulada' AND f.periodo IN ({marcadores}) "
-        "ORDER BY f.periodo, f.id_factura",
-        [cliente_id, *periodos],
-    ).fetchall()
-    resultado: dict[str, list[FacturaResumen]] = {p: [] for p in periodos}
-    for fila in filas:
-        resultado[fila["periodo"]].append(_factura(fila))
-    return resultado
 
 
 def _lineas_con_servicio(con, cliente_id: int, id_factura: int) -> dict:

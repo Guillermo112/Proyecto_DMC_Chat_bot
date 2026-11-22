@@ -81,6 +81,19 @@ def test_saldo_coincide_con_la_capa_de_datos():
     assert r.json() == saldo_pendiente(CLIENTE_1).model_dump()
 
 
+def test_saldo_con_duplicado_responde_null_y_no_cero():
+    """El cliente 1 tiene un duplicado en 2026-11: el saldo va en null (no 0) y se marca el periodo."""
+    datos = api.get("/mi/saldo", headers=_como(CLIENTE_1)).json()
+    assert datos["saldo_total"] is None and datos["periodos_multiples"] == ["2026-11"]
+
+
+def test_resumen_con_duplicado_responde_null():
+    r = api.get("/mi/resumen", params={"fecha_desde": "2026-12-01", "fecha_hasta": "2026-12-31"},
+                headers=_como(CLIENTE_1))
+    datos = r.json()
+    assert r.status_code == 200 and datos["total"] is None and datos["periodos_multiples"] == ["2026-11"]
+
+
 def test_resumen_requiere_fechas_y_rango_valido():
     h = _como(CLIENTE_1)
     assert api.get("/mi/resumen", headers=h).status_code == 422
