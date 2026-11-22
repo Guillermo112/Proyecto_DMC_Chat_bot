@@ -100,8 +100,10 @@ prometería cosas que el sistema no hace.
 - [x] Chat (`POST /mi/chat`, página `/chat`, 2026-11-22): RAG previo al modelo (sin
       llamada extra), 10 herramientas, tope de vueltas, memoria corta en memoria y panel
       de traza con tokens. Modelo: DeepSeek por `LLM_*`.
-- [ ] Probar el chat con DeepSeek real (la clave del `.env` dio 401) y ajustar el prompt
-      con lo que se vea en las casuísticas.
+- [x] Prueba por casuística lista: `python -X utf8 -m scripts.probar_chat` (11 casos con
+      los datos de `db/casos_datos.json`: herramienta usada, datos citados, frases prohibidas).
+- [ ] Correrla con DeepSeek real (la clave del `.env` dio 401; se pidió una nueva) y ajustar
+      el prompt con lo que falle.
 - [ ] Evaluación: una pregunta por casuística con los datos sembrados
       (ejemplos en `docs/casuisticas_api.md`), comprobando herramienta llamada,
       monto citado y frases prohibidas.

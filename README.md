@@ -225,6 +225,19 @@ se cierre antes de leerla. Desde PowerShell se escribe con `.\` delante:
   .venv\Scripts\python -m pytest -q
   ```
 
+- **Probar el chat con el modelo real, caso por caso** (necesita `LLM_*`; corre sobre
+  una copia de la base y no envía correos; con `deepseek-flash` cuesta menos de un centavo):
+
+  ```powershell
+  .venv\Scripts\python -X utf8 -m scripts.probar_chat
+  ```
+
+  Recorre 11 casos (CS-01, 02, 06, 09, 10, 11, 13, glosario, fuera de tema, otro RUC e
+  intento de cambiar las reglas). Por cada uno revisa que use la herramienta esperada,
+  que cite los datos sembrados (de `db/casos_datos.json`) y que no diga frases
+  prohibidas del modo A. `--detalle` muestra las respuestas; `CS-01 CS-13` corre solo
+  esos casos.
+
 - **Desarrollar con recarga automática** (reinicia la API al guardar un `.py`):
 
   ```powershell
@@ -249,6 +262,7 @@ se cierre antes de leerla. Desde PowerShell se escribe con `.\` delante:
 | Borraste `.venv` o algo dejó de funcionar | `install.bat` |
 | `run.bat` dice que el puerto está ocupado | Cierra el otro servidor o usa `run.bat 8001` |
 | No llegan los códigos OTP | Revisa `SMTP_*`, tu `CORREO_PRUEBA_n` y que hayas ejecutado `regenerar_base.bat` después; revisa también spam |
+| Cambiaste el prompt, las herramientas o el modelo, o se acerca una demo | `scripts.probar_chat` (ver [Día a día](#día-a-día)) |
 | El chat responde "El asistente no está disponible" | Revisa `LLM_BASE_URL`, `LLM_API_KEY` y `LLM_MODEL` en `.env` (el mensaje dice si falta o si la clave es inválida) y reinicia `run.bat` |
 
 ---
@@ -347,7 +361,7 @@ app/
   tools/         # herramientas del agente: datos del cliente desde app/data
 db/              # schema.sql, generar_datos.py y la base generada (anticipa.db)
 docs/            # PDF de conocimiento y documentación de la capa de datos
-scripts/         # demo_otp.py, preparar_rag.py, clientes_prueba.py
+scripts/         # demo_otp.py, preparar_rag.py, clientes_prueba.py, probar_chat.py
 tests/           # pytest
 catalogo.json    # catálogo de casuísticas, servicios y políticas
 faq.json         # preguntas frecuentes (pendiente de alinear con el modo A)
