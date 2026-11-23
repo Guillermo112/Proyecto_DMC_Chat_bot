@@ -25,6 +25,7 @@ from typing import Any, Callable
 
 from app import config
 from app.agente.prompt import SYSTEM_PROMPT
+from app.agente.security import (detectar_inyeccion, redactar_datos_sensibles, respuesta_bloqueo,validar_salida)
 from app.data import facturacion
 from app.llm import SinProveedores, crear_router
 from app.schemas.casos import Canal
@@ -196,35 +197,95 @@ class ServicioChat:
         return texto, documentos, None
 
     # -- turno ------------------------------------------------------------------
-    def responder(self, cliente_id: int, conversacion_id: str, mensaje: str,
-                  canal: Canal = "web") -> Turno:
-        """Un turno. `canal` es por dónde llegó el mensaje: va a los casos que se registren."""
+    def responder(self, cliente_id: int, conversacion_id: str, mensaje: str, canal: Canal = "web") -> Turno:
+
         inicio = time.perf_counter()
-        historial = self._historial((cliente_id, conversacion_id))
-        contexto, documentos, aviso = self._contexto(mensaje)
 
+        # Primera barrera: detectar ataques antes de usar RAG o DeepSeek.
+        motivo_entrada = detectar_inyeccion(mensaje)
+
+        if motivo_entrada:
+            texto_bloqueo = respuesta_bloqueo(motivo_entrada)
+            ms = int((time.perf_counter() - inicio) * 1000)
+            log.warning("chat.bloqueo_seguridad canal=%s cliente=%s motivo=%s",canal,cliente_id,motivo_entrada)
+            return Turno(texto=texto_bloqueo, ms=ms)
+
+        # Redactar datos sensibles antes de enviarlos a otros componentes.
+        mensaje_seguro, hallazgos_entrada = redactar_datos_sensibles(mensaje)
+
+        if hallazgos_entrada:
+            log.info("chat.entrada_redactada canal=%s cliente=%s tipos=%s", canal, cliente_id, hallazgos_entrada)
+
+        # Obtener memoria de conversación.
+        historial = self._historial((cliente_id,conversacion_id,))
+
+        # Buscar contexto RAG usando la versión segura del mensaje.
+        contexto, documentos, aviso = self._contexto(mensaje_seguro)
+
+        # Como defensa adicional, se redacta también el texto recuperado
+        # antes de enviarlo al modelo.
+        contexto_seguro, hallazgos_contexto = redactar_datos_sensibles(contexto)
+
+        if hallazgos_contexto:
+            log.info("chat.contexto_redactado cliente=%s tipos=%s", cliente_id, hallazgos_contexto)
+
+        # Construir mensajes para DeepSeek.
         mensajes: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}, *historial]
-        if contexto:
-            mensajes.append({"role": "system", "content":
-                             "Contexto de documentos (políticas y glosario; no son datos del cliente):\n\n"
-                             + contexto})
-        mensajes.append({"role": "user", "content": mensaje})
 
+        if contexto_seguro:
+            mensajes.append(
+                {
+                    "role": "system",
+                    "content": (
+                        "Contexto de documentos "
+                        "(políticas y glosario; no son datos del cliente):\n\n"
+                        + contexto_seguro
+                    ),
+                }
+            )
+
+        mensajes.append({"role": "user", "content": mensaje_seguro})
+
+        # Preparar turno y herramientas.
         turno = Turno(texto="", documentos=documentos, aviso=aviso)
-        herramientas = self._herramientas(cliente_id, mensaje, canal=canal)
+
+        # También se agrega a Herramientas la versión redactada.
+        # Esto evita guardar secretos accidentalmente en palabras_cliente.
+        herramientas = self._herramientas(cliente_id, mensaje_seguro,canal=canal)
+
         cache: dict[str, dict[str, Any]] = {}
+
+        # Ejecutar DeepSeek + Tool Calling.
         try:
             texto = self._bucle(mensajes, herramientas, cache, turno)
+
         except SinProveedores as exc:
             raise ChatNoDisponible(str(exc).splitlines()[0]) from exc
 
-        turno.texto = texto
+        # Última barrera, revisar la salida del LLM.
+        texto_seguro, bloqueado, motivo_salida = validar_salida(texto)
+
+        if motivo_salida:
+            nivel = (logging.WARNING
+                if bloqueado
+                else logging.INFO
+            )
+            log.log(nivel,"chat.salida_seguridad canal=%s cliente=%s motivo=%s", canal, cliente_id, motivo_salida)
+
+
+        # Preparar resultado final.
+        turno.texto = texto_seguro
         turno.ms = int((time.perf_counter() - inicio) * 1000)
-        historial.append({"role": "user", "content": mensaje})
-        historial.append({"role": "assistant", "content": texto})
+
+        # La memoria conserva únicamente versiones seguras.
+        historial.append({"role": "user", "content": mensaje_seguro})
+        historial.append({"role": "assistant", "content": texto_seguro})
+
         log.info("chat.turno canal=%s cliente=%s herramientas=%s documentos=%s llamadas=%s tokens=%s ms=%s",
-                 canal, cliente_id, [h["nombre"] for h in turno.herramientas], len(documentos),
-                 turno.llamadas, turno.tokens, turno.ms)
+            canal, cliente_id, [h["nombre"] for h in turno.herramientas], len(documentos), 
+            turno.llamadas, turno.tokens, turno.ms,
+        )
+
         return turno
 
     def _llamar(self, mensajes: list[dict[str, Any]], turno: Turno, con_herramientas: bool) -> Any:
